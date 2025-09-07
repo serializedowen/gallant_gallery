@@ -1,0 +1,740 @@
+const express = require('express');
+const Jimp = require('jimp');
+const fs = require('fs-extra');
+const path = require('path');
+const NodeCache = require('node-cache');
+const mime = require('mime-types');
+const chokidar = require('chokidar');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+const IMAGES_DIR = process.env.IMAGES_DIR || './images';
+const THUMBNAILS_DIR = './thumbnails';
+const CACHE_DIR = './cache';
+const THUMBNAIL_INDEX_FILE = path.join(CACHE_DIR, 'thumbnail-index.json');
+
+// Cache for 1 hour
+const cache = new NodeCache({ stdTTL: 3600 });
+
+// Thumbnail index to track modification times
+let thumbnailIndex = {};
+
+// Ensure directories exist
+fs.ensureDirSync(THUMBNAILS_DIR);
+fs.ensureDirSync(CACHE_DIR);
+fs.ensureDirSync(IMAGES_DIR);
+
+// Thumbnail index management
+async function loadThumbnailIndex() {
+    try {
+        if (await fs.pathExists(THUMBNAIL_INDEX_FILE)) {
+            const data = await fs.readJson(THUMBNAIL_INDEX_FILE);
+            thumbnailIndex = data || {};
+            console.log(`Loaded thumbnail index with ${Object.keys(thumbnailIndex).length} entries`);
+        } else {
+            thumbnailIndex = {};
+            console.log('No existing thumbnail index found, starting fresh');
+        }
+    } catch (error) {
+        console.error('Error loading thumbnail index:', error);
+        thumbnailIndex = {};
+    }
+}
+
+async function saveThumbnailIndex() {
+    try {
+        await fs.writeJson(THUMBNAIL_INDEX_FILE, thumbnailIndex, { spaces: 2 });
+    } catch (error) {
+        console.error('Error saving thumbnail index:', error);
+    }
+}
+
+async function isImageUpToDate(imagePath, thumbnailPath) {
+    try {
+        // Check if thumbnail file exists
+        if (!await fs.pathExists(thumbnailPath)) {
+            return false;
+        }
+
+        // Get image modification time and size
+        const imageStats = await fs.stat(imagePath);
+        const imageModTime = imageStats.mtime.getTime();
+        const imageSize = imageStats.size;
+
+        // Get relative path for index key
+        const relativePath = path.relative(IMAGES_DIR, imagePath).replace(/\\/g, '/');
+        
+        // Check if we have index entry and if modification time and size match
+        const indexEntry = thumbnailIndex[relativePath];
+        if (!indexEntry || 
+            indexEntry.modTime !== imageModTime || 
+            indexEntry.fileSize !== imageSize) {
+            return false;
+        }
+
+        // Additional check: verify thumbnail file still exists and has reasonable size
+        const thumbnailStats = await fs.stat(thumbnailPath);
+        if (thumbnailStats.size < 1000) { // Thumbnail should be at least 1KB
+            return false;
+        }
+
+        return true;
+    } catch (error) {
+        return false;
+    }
+}
+
+async function updateThumbnailIndex(imagePath, thumbnailPath, metadata = null) {
+    try {
+        const imageStats = await fs.stat(imagePath);
+        const relativePath = path.relative(IMAGES_DIR, imagePath).replace(/\\/g, '/');
+        
+        // Get metadata if not provided
+        if (!metadata) {
+            metadata = await getImageMetadataInternal(imagePath);
+        }
+        
+        thumbnailIndex[relativePath] = {
+            modTime: imageStats.mtime.getTime(),
+            thumbnailPath: path.basename(thumbnailPath),
+            createdAt: Date.now(),
+            metadata: metadata, // Cache the metadata
+            fileSize: imageStats.size
+        };
+
+        // Save index periodically (every 10 updates) or when forced
+        if (Object.keys(thumbnailIndex).length % 10 === 0) {
+            await saveThumbnailIndex();
+        }
+    } catch (error) {
+        console.error('Error updating thumbnail index:', error);
+    }
+}
+
+async function removeFromThumbnailIndex(imagePath) {
+    try {
+        const relativePath = path.relative(IMAGES_DIR, imagePath).replace(/\\/g, '/');
+        delete thumbnailIndex[relativePath];
+        await saveThumbnailIndex();
+    } catch (error) {
+        console.error('Error removing from thumbnail index:', error);
+    }
+}
+
+// Middleware
+app.use(express.static('public'));
+app.use('/thumbnails/:id', async (req, res, next) => {
+  const id = req.params.id;
+  const exts = ['.webp', '.jpg', '.png'];
+  for (const ext of exts) {
+    const filePath = path.join(THUMBNAILS_DIR, id + ext);
+    if (await fs.pathExists(filePath)) {
+      res.type(ext);
+      return res.sendFile(path.resolve(filePath));
+    }
+  }
+  res.status(404).send('Thumbnail not found');
+});
+app.use('/images', express.static(IMAGES_DIR));
+
+// Supported image formats
+const supportedFormats = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff'];
+
+// Check if file is an image
+function isImageFile(filename) {
+    const ext = path.extname(filename).toLowerCase();
+    return supportedFormats.includes(ext);
+}
+
+// Generate thumbnail with lazy loading
+async function generateThumbnail(imagePath, thumbnailPath, size = 300, force = false) {
+    const timeStart = Date.now();
+    
+    try {
+        // Check if thumbnail is up to date (unless forced)
+        if (!force && await isImageUpToDate(imagePath, thumbnailPath)) {
+            console.log(`Skipped thumbnail for ${path.basename(imagePath)} (up to date)`);
+            return true;
+        }
+
+        console.log(`Generating thumbnail for ${path.basename(imagePath)}...`);
+        
+        const image = await Jimp.read(imagePath);
+        await image
+            .cover(size, size)
+            .quality(80)
+            .writeAsync(thumbnailPath);
+
+        // Get metadata and update the thumbnail index
+        const metadata = await getImageMetadataInternal(imagePath);
+        await updateThumbnailIndex(imagePath, thumbnailPath, metadata);
+        
+        console.log(`Generated thumbnail for ${path.basename(imagePath)} in ${Date.now() - timeStart}ms`);
+        return true;
+    } catch (error) {
+        console.error('Error generating thumbnail:', error);
+        return false;
+    }
+}
+
+// Internal function to read metadata from file (always reads from disk)
+async function getImageMetadataInternal(imagePath) {
+    try {
+        const stats = await fs.stat(imagePath);
+        
+        // For basic metadata, we'll use Jimp to get dimensions
+        let width, height, format;
+        try {
+            const image = await Jimp.read(imagePath);
+            width = image.bitmap.width;
+            height = image.bitmap.height;
+            format = image.getMIME().split('/')[1];
+        } catch (e) {
+            // Fallback if Jimp can't read the image
+            width = null;
+            height = null;
+            format = path.extname(imagePath).slice(1).toLowerCase();
+        }
+        
+        return {
+            filename: path.basename(imagePath),
+            size: stats.size,
+            width: width,
+            height: height,
+            format: format,
+            lastModified: stats.mtime
+        };
+    } catch (error) {
+        console.error('Error getting metadata:', error);
+        return null;
+    }
+}
+
+// Get image metadata with caching
+async function getImageMetadata(imagePath) {
+    try {
+        const stats = await fs.stat(imagePath);
+        const relativePath = path.relative(IMAGES_DIR, imagePath).replace(/\\/g, '/');
+        
+        // Check if we have cached metadata in the thumbnail index
+        const indexEntry = thumbnailIndex[relativePath];
+        if (indexEntry && 
+            indexEntry.modTime === stats.mtime.getTime() && 
+            indexEntry.fileSize === stats.size &&
+            indexEntry.metadata) {
+            // Return cached metadata
+            return indexEntry.metadata;
+        }
+        
+        // Read metadata from file and update cache
+        const metadata = await getImageMetadataInternal(imagePath);
+        
+        // Update the index with new metadata (but don't save immediately)
+        if (metadata) {
+            const thumbnailId = Buffer.from(relativePath).toString('base64');
+            const thumbnailPath = path.join(THUMBNAILS_DIR, thumbnailId + '.jpg');
+            
+            thumbnailIndex[relativePath] = {
+                ...(indexEntry || {}),
+                modTime: stats.mtime.getTime(),
+                fileSize: stats.size,
+                metadata: metadata,
+                updatedAt: Date.now()
+            };
+        }
+        
+        return metadata;
+    } catch (error) {
+        console.error('Error getting metadata:', error);
+        return await getImageMetadataInternal(imagePath); // Fallback to direct read
+    }
+}
+
+// Recursively scan directory for images
+async function scanImagesDirectory(dirPath, relativePath = '') {
+    const images = [];
+    
+    try {
+        const items = await fs.readdir(dirPath);
+        
+        for (const item of items) {
+            const fullPath = path.join(dirPath, item);
+            const relativeItemPath = path.join(relativePath, item);
+            const stats = await fs.stat(fullPath);
+            
+            if (stats.isDirectory()) {
+                // Recursively scan subdirectories
+                const subImages = await scanImagesDirectory(fullPath, relativeItemPath);
+                images.push(...subImages);
+            } else if (stats.isFile() && isImageFile(item)) {
+                images.push({
+                    path: relativeItemPath.replace(/\\/g, '/'), // Normalize path separators
+                    fullPath: fullPath,
+                    directory: relativePath || '/'
+                });
+            }
+        }
+    } catch (error) {
+        console.error('Error scanning directory:', error);
+    }
+    
+    return images;
+}
+
+// Get all images with caching
+async function getAllImages() {
+    const cacheKey = 'all_images';
+    let images = cache.get(cacheKey);
+    
+    if (!images) {
+        console.log('Scanning images directory...');
+        images = await scanImagesDirectory(IMAGES_DIR);
+        cache.set(cacheKey, images);
+        console.log(`Found ${images.length} images`);
+    }
+    
+    return images;
+}
+
+// File watcher daemon for automatic thumbnail generation
+class ThumbnailDaemon {
+    constructor() {
+        this.watcher = null;
+        this.processingQueue = new Set();
+        this.isWatching = false;
+    }
+
+    start() {
+        if (this.isWatching) {
+            console.log('Thumbnail daemon is already running');
+            return;
+        }
+
+        console.log(`Starting thumbnail daemon for directory: ${path.resolve(IMAGES_DIR)}`);
+        
+        // Watch for new files in the images directory
+        this.watcher = chokidar.watch(IMAGES_DIR, {
+            ignored: /(^|[\/\\])\../, // ignore dotfiles
+            persistent: true,
+            ignoreInitial: false, // Process existing files on startup
+            depth: undefined, // Watch all subdirectories
+            awaitWriteFinish: {
+                stabilityThreshold: 2000,
+                pollInterval: 100
+            }
+        });
+
+        this.watcher
+            .on('add', async (filePath) => {
+                if (this.isImageFile(filePath)) {
+                    await this.processNewImage(filePath, 'added');
+                }
+            })
+            .on('change', async (filePath) => {
+                if (this.isImageFile(filePath)) {
+                    await this.processNewImage(filePath, 'changed');
+                }
+            })
+            .on('unlink', async (filePath) => {
+                if (this.isImageFile(filePath)) {
+                    await this.handleImageDeletion(filePath);
+                }
+            })
+            .on('ready', () => {
+                console.log('Thumbnail daemon is ready and watching for changes');
+                this.isWatching = true;
+            })
+            .on('error', error => {
+                console.error('Thumbnail daemon error:', error);
+            });
+    }
+
+    stop() {
+        if (this.watcher) {
+            this.watcher.close();
+            this.isWatching = false;
+            console.log('Thumbnail daemon stopped');
+        }
+    }
+
+    isImageFile(filePath) {
+        const ext = path.extname(filePath).toLowerCase();
+        return supportedFormats.includes(ext);
+    }
+
+    async processNewImage(filePath, action) {
+        const relativePath = path.relative(IMAGES_DIR, filePath);
+        const normalizedPath = relativePath.replace(/\\/g, '/');
+        
+        // Prevent duplicate processing
+        if (this.processingQueue.has(normalizedPath)) {
+            return;
+        }
+
+        this.processingQueue.add(normalizedPath);
+        
+        try {
+            console.log(`📸 Image ${action}: ${normalizedPath}`);
+            
+            // Generate thumbnail
+            const thumbnailId = Buffer.from(normalizedPath).toString('base64');
+            const thumbnailPath = path.join(THUMBNAILS_DIR, thumbnailId + '.jpg');
+            
+            // Force regeneration if the image was changed, otherwise use lazy loading
+            const forceRegenerate = action === 'changed';
+            const success = await generateThumbnail(filePath, thumbnailPath, 300, forceRegenerate);
+            
+            if (success) {
+                console.log(`✅ Thumbnail processed for: ${normalizedPath}`);
+                
+                // Clear cache to force refresh on next request
+                cache.del('all_images');
+                console.log('🔄 Image cache cleared');
+            } else {
+                console.log(`❌ Failed to generate thumbnail for: ${normalizedPath}`);
+            }
+            
+        } catch (error) {
+            console.error(`Error processing image ${normalizedPath}:`, error);
+        } finally {
+            this.processingQueue.delete(normalizedPath);
+        }
+    }
+
+    async handleImageDeletion(filePath) {
+        const relativePath = path.relative(IMAGES_DIR, filePath);
+        const normalizedPath = relativePath.replace(/\\/g, '/');
+        
+        try {
+            console.log(`🗑️ Image deleted: ${normalizedPath}`);
+            
+            // Remove corresponding thumbnail
+            const thumbnailId = Buffer.from(normalizedPath).toString('base64');
+            const thumbnailPath = path.join(THUMBNAILS_DIR, thumbnailId + '.jpg');
+            
+            if (await fs.pathExists(thumbnailPath)) {
+                await fs.remove(thumbnailPath);
+                console.log(`🗑️ Thumbnail removed for: ${normalizedPath}`);
+            }
+            
+            // Remove from thumbnail index
+            await removeFromThumbnailIndex(filePath);
+            console.log(`🗑️ Removed from thumbnail index: ${normalizedPath}`);
+            
+            // Clear cache to force refresh
+            cache.del('all_images');
+            console.log('🔄 Image cache cleared');
+            
+        } catch (error) {
+            console.error(`Error handling deletion of ${normalizedPath}:`, error);
+        }
+    }
+
+    // Generate thumbnails for all existing images (useful for initial setup)
+    async generateAllThumbnails() {
+        console.log('🚀 Starting bulk thumbnail generation...');
+        const images = await scanImagesDirectory(IMAGES_DIR);
+        
+        let processed = 0;
+        let skipped = 0;
+        
+        for (const img of images) {
+            const thumbnailId = Buffer.from(img.path).toString('base64');
+            const thumbnailPath = path.join(THUMBNAILS_DIR, thumbnailId + '.jpg');
+            
+            // Use lazy loading - only generate if not up to date
+            const isUpToDate = await isImageUpToDate(img.fullPath, thumbnailPath);
+            if (isUpToDate) {
+                skipped++;
+                continue;
+            }
+            
+            const success = await generateThumbnail(img.fullPath, thumbnailPath);
+            if (success) {
+                processed++;
+                if (processed % 10 === 0) {
+                    console.log(`📸 Generated ${processed} thumbnails...`);
+                }
+            }
+        }
+        
+        // Save index after bulk generation
+        await saveThumbnailIndex();
+        
+        console.log(`✅ Bulk thumbnail generation complete: ${processed} generated, ${skipped} skipped`);
+    }
+
+    getStatus() {
+        const indexEntries = Object.keys(thumbnailIndex).length;
+        const entriesWithMetadata = Object.values(thumbnailIndex).filter(entry => entry.metadata).length;
+        
+        return {
+            isWatching: this.isWatching,
+            processingQueue: Array.from(this.processingQueue),
+            watchedDirectory: path.resolve(IMAGES_DIR),
+            thumbnailIndex: {
+                totalEntries: indexEntries,
+                entriesWithMetadata: entriesWithMetadata,
+                indexFile: THUMBNAIL_INDEX_FILE,
+                cacheHitRate: indexEntries > 0 ? Math.round((entriesWithMetadata / indexEntries) * 100) : 0
+            }
+        };
+    }
+}
+
+// Initialize thumbnail daemon
+const thumbnailDaemon = new ThumbnailDaemon();
+
+// API Routes
+
+// Get images with pagination and search
+app.get('/api/images', async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        const search = req.query.search || '';
+        
+        let images = await getAllImages();
+        
+        // Filter by search term
+        if (search) {
+            images = images.filter(img => 
+                img.path.toLowerCase().includes(search.toLowerCase())
+            );
+        }
+        
+        // Sort by path
+        images.sort((a, b) => a.path.localeCompare(b.path));
+        
+        // Pagination
+        const startIndex = (page - 1) * limit;
+        const endIndex = startIndex + limit;
+        const paginatedImages = images.slice(startIndex, endIndex);
+        
+
+        const timeStart = Date.now();
+        // Generate thumbnails and get metadata for requested images
+        const imageData = await Promise.all(
+            paginatedImages.map(async (img) => {
+                const thumbnailId = Buffer.from(img.path).toString('base64');
+                const thumbnailPath = path.join(THUMBNAILS_DIR, thumbnailId + '.jpg');
+                
+                // Generate thumbnail using lazy loading (only if not up to date)
+                const isUpToDate = await isImageUpToDate(img.fullPath, thumbnailPath);
+
+                if (!isUpToDate) {
+                    await generateThumbnail(img.fullPath, thumbnailPath);
+                }
+                
+                const metadata = await getImageMetadata(img.fullPath);
+                
+                return {
+                    id: Buffer.from(img.path).toString('base64'),
+                    path: img.path,
+                    thumbnail: `/thumbnails/${thumbnailId}`,
+                    directory: img.directory,
+                    metadata: metadata
+                };
+            })
+        );
+
+
+        console.log(`Processed ${imageData.length} images in ${Date.now() - timeStart}ms`);
+        
+        res.json({
+            images: imageData,
+            totalCount: images.length,
+            page,
+            limit,
+            hasMore: endIndex < images.length
+        });
+    } catch (error) {
+        console.error('Error fetching images:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Get single image metadata
+app.get('/api/image/:id', async (req, res) => {
+    try {
+        const imagePath = Buffer.from(req.params.id, 'base64').toString();
+        const fullPath = path.join(IMAGES_DIR, imagePath);
+        
+        if (!await fs.pathExists(fullPath)) {
+            return res.status(404).json({ error: 'Image not found' });
+        }
+        
+        const metadata = await getImageMetadata(fullPath);
+        
+        res.json({
+            id: req.params.id,
+            path: imagePath,
+            url: `/images/${imagePath}`,
+            metadata
+        });
+    } catch (error) {
+        console.error('Error fetching image:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Refresh cache
+app.post('/api/refresh', async (req, res) => {
+    try {
+        cache.flushAll();
+        const images = await getAllImages();
+        res.json({ message: 'Cache refreshed', count: images.length });
+    } catch (error) {
+        console.error('Error refreshing cache:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Daemon control routes
+app.get('/api/daemon/status', (req, res) => {
+    try {
+        res.json(thumbnailDaemon.getStatus());
+    } catch (error) {
+        console.error('Error getting daemon status:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+app.post('/api/daemon/start', (req, res) => {
+    try {
+        thumbnailDaemon.start();
+        res.json({ message: 'Thumbnail daemon started' });
+    } catch (error) {
+        console.error('Error starting daemon:', error);
+        res.status(500).json({ error: 'Failed to start daemon' });
+    }
+});
+
+app.post('/api/daemon/stop', (req, res) => {
+    try {
+        thumbnailDaemon.stop();
+        res.json({ message: 'Thumbnail daemon stopped' });
+    } catch (error) {
+        console.error('Error stopping daemon:', error);
+        res.status(500).json({ error: 'Failed to stop daemon' });
+    }
+});
+
+app.post('/api/daemon/generate-all', async (req, res) => {
+    try {
+        // Run in background to avoid request timeout
+        thumbnailDaemon.generateAllThumbnails().catch(error => {
+            console.error('Error in bulk thumbnail generation:', error);
+        });
+        res.json({ message: 'Bulk thumbnail generation started' });
+    } catch (error) {
+        console.error('Error starting bulk generation:', error);
+        res.status(500).json({ error: 'Failed to start bulk generation' });
+    }
+});
+
+app.post('/api/daemon/rebuild-index', async (req, res) => {
+    try {
+        console.log('🔧 Rebuilding thumbnail index...');
+        
+        // Clear current index
+        thumbnailIndex = {};
+        
+        // Scan thumbnails directory and rebuild index
+        const images = await scanImagesDirectory(IMAGES_DIR);
+        let rebuilt = 0;
+        
+        for (const img of images) {
+            const thumbnailId = Buffer.from(img.path).toString('base64');
+            const thumbnailPath = path.join(THUMBNAILS_DIR, thumbnailId + '.jpg');
+            
+            if (await fs.pathExists(thumbnailPath)) {
+                // Get metadata for the image
+                const metadata = await getImageMetadataInternal(img.fullPath);
+                await updateThumbnailIndex(img.fullPath, thumbnailPath, metadata);
+                rebuilt++;
+                
+                if (rebuilt % 50 === 0) {
+                    console.log(`🔧 Rebuilt ${rebuilt} index entries...`);
+                }
+            }
+        }
+        
+        await saveThumbnailIndex();
+        console.log(`✅ Thumbnail index rebuilt with ${rebuilt} entries`);
+        
+        res.json({ 
+            message: 'Thumbnail index rebuilt successfully', 
+            entries: rebuilt 
+        });
+    } catch (error) {
+        console.error('Error rebuilding index:', error);
+        res.status(500).json({ error: 'Failed to rebuild index' });
+    }
+});
+
+// Get thumbnail index statistics
+app.get('/api/daemon/index-stats', (req, res) => {
+    try {
+        const entries = Object.values(thumbnailIndex);
+        const stats = {
+            totalEntries: entries.length,
+            entriesWithMetadata: entries.filter(entry => entry.metadata).length,
+            entriesWithThumbnails: entries.filter(entry => entry.thumbnailPath).length,
+            oldestEntry: entries.length > 0 ? Math.min(...entries.map(e => e.createdAt || 0)) : null,
+            newestEntry: entries.length > 0 ? Math.max(...entries.map(e => e.updatedAt || e.createdAt || 0)) : null,
+            indexFile: THUMBNAIL_INDEX_FILE,
+            indexSize: JSON.stringify(thumbnailIndex).length
+        };
+        
+        res.json(stats);
+    } catch (error) {
+        console.error('Error getting index stats:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Serve main page
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Start server
+app.listen(PORT, async () => {
+    console.log(`Gallery server running on http://localhost:${PORT}`);
+    console.log(`Images directory: ${path.resolve(IMAGES_DIR)}`);
+    console.log(`Thumbnails directory: ${path.resolve(THUMBNAILS_DIR)}`);
+    
+    // Load thumbnail index
+    await loadThumbnailIndex();
+    
+    // Start the thumbnail daemon
+    thumbnailDaemon.start();
+    
+    // Optionally generate thumbnails for existing images on startup
+    if (process.env.GENERATE_THUMBNAILS_ON_START !== 'false') {
+        console.log('Generating thumbnails for existing images...');
+        setTimeout(() => {
+            thumbnailDaemon.generateAllThumbnails().catch(error => {
+                console.error('Error in startup thumbnail generation:', error);
+            });
+        }, 2000); // Delay to let the watcher initialize
+    }
+});
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+    console.log('\n🛑 Shutting down server gracefully...');
+    thumbnailDaemon.stop();
+    await saveThumbnailIndex();
+    console.log('💾 Thumbnail index saved');
+    process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+    console.log('\n🛑 Shutting down server gracefully...');
+    thumbnailDaemon.stop();
+    await saveThumbnailIndex();
+    console.log('💾 Thumbnail index saved');
+    process.exit(0);
+});

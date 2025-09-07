@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gallant Gallery</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <h1 class="logo">
+                <i class="fas fa-images"></i>
+                Gallant Gallery
+            </h1>
+            <div class="search-container">
+                <input type="text" id="searchInput" placeholder="Search images..." class="search-input">
+                <i class="fas fa-search search-icon"></i>
+            </div>
+            <button id="refreshBtn" class="refresh-btn" title="Refresh Gallery">
+                <i class="fas fa-sync-alt"></i>
+            </button>
+            <button id="daemonBtn" class="daemon-btn" title="Daemon Status">
+                <i class="fas fa-robot"></i>
+                <span class="daemon-status" id="daemonStatus">●</span>
+            </button>
+        </div>
+    </header>
+
+    <nav class="filters">
+        <div class="container">
+            <div class="filter-tabs">
+                <button class="filter-tab active" data-filter="all">All Images</button>
+                <span class="image-count" id="imageCount">0 images</span>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main">
+        <div class="container">
+            <div class="gallery-grid" id="galleryGrid">
+                <!-- Images will be loaded here -->
+            </div>
+            
+            <div class="loading" id="loading">
+                <i class="fas fa-spinner fa-spin"></i>
+                <span>Loading images...</span>
+            </div>
+
+            <div class="no-results" id="noResults" style="display: none;">
+                <i class="fas fa-search"></i>
+                <h3>No images found</h3>
+                <p>Try adjusting your search terms</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Lightbox Modal -->
+    <div class="lightbox" id="lightbox">
+        <div class="lightbox-overlay" id="lightboxOverlay"></div>
+        <div class="lightbox-container">
+            <button class="lightbox-close" id="lightboxClose">
+                <i class="fas fa-times"></i>
+            </button>
+            
+            <button class="lightbox-nav lightbox-prev" id="lightboxPrev">
+                <i class="fas fa-chevron-left"></i>
+            </button>
+            
+            <button class="lightbox-nav lightbox-next" id="lightboxNext">
+                <i class="fas fa-chevron-right"></i>
+            </button>
+            
+            <div class="lightbox-content">
+                <img class="lightbox-image" id="lightboxImage" alt="">
+                
+                <div class="lightbox-info" id="lightboxInfo">
+                    <div class="lightbox-metadata">
+                        <h3 class="image-title" id="imageTitle"></h3>
+                        <div class="metadata-grid">
+                            <div class="metadata-item">
+                                <span class="metadata-label">Size:</span>
+                                <span class="metadata-value" id="imageSize"></span>
+                            </div>
+                            <div class="metadata-item">
+                                <span class="metadata-label">Dimensions:</span>
+                                <span class="metadata-value" id="imageDimensions"></span>
+                            </div>
+                            <div class="metadata-item">
+                                <span class="metadata-label">Format:</span>
+                                <span class="metadata-value" id="imageFormat"></span>
+                            </div>
+                            <div class="metadata-item">
+                                <span class="metadata-label">Directory:</span>
+                                <span class="metadata-value" id="imageDirectory"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Daemon Control Modal -->
+    <div class="daemon-modal" id="daemonModal">
+        <div class="daemon-modal-overlay" id="daemonModalOverlay"></div>
+        <div class="daemon-modal-container">
+            <div class="daemon-modal-header">
+                <h3><i class="fas fa-robot"></i> Thumbnail Daemon</h3>
+                <button class="daemon-modal-close" id="daemonModalClose">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="daemon-modal-content">
+                <div class="daemon-status-info">
+                    <div class="status-item">
+                        <span class="status-label">Status:</span>
+                        <span class="status-value" id="daemonStatusText">Loading...</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Watching:</span>
+                        <span class="status-value" id="daemonDirectory">-</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Processing Queue:</span>
+                        <span class="status-value" id="daemonQueue">-</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Index Entries:</span>
+                        <span class="status-value" id="indexEntries">-</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Metadata Cache:</span>
+                        <span class="status-value" id="metadataCache">-</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Thumbnail Index:</span>
+                        <span class="status-value" id="thumbnailIndexCount">-</span>
+                    </div>
+                </div>
+                <div class="daemon-controls">
+                    <button class="daemon-control-btn" id="startDaemonBtn">
+                        <i class="fas fa-play"></i> Start Daemon
+                    </button>
+                    <button class="daemon-control-btn" id="stopDaemonBtn">
+                        <i class="fas fa-stop"></i> Stop Daemon
+                    </button>
+                    <button class="daemon-control-btn" id="generateAllBtn">
+                        <i class="fas fa-images"></i> Generate All Thumbnails
+                    </button>
+                    <button class="daemon-control-btn" id="rebuildIndexBtn">
+                        <i class="fas fa-database"></i> Rebuild Index
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

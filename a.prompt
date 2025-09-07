@@ -1,0 +1,10 @@
+i need an node.js image gallery app that looks like the demo i provided.  with following features:
+
+- you get a folder as an ENV variable that contains images and subfolders with images
+- the files might be large in size so you need to create thumbnails and indexes on the fly and cache them locally
+- the app should display the images in a grid view with infinite scrolling
+- clicking on an image should open a lightbox view with next/previous navigation
+- the app should support basic image metadata display (like filename, size, dimensions)
+- the app should be responsive and work well on both desktop and mobile devices
+- the app should have a search functionality to filter images by filename
+- the app should be able to handle a large number of images efficiently
