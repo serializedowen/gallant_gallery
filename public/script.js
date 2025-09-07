@@ -5,11 +5,13 @@ class GalleryApp {
         this.hasMore = true;
         this.searchTerm = '';
         this.images = [];
+        this.folders = [];
         this.currentImageIndex = 0;
+        this.currentView = 'folders'; // 'folders' or 'grid'
         
         this.initializeElements();
         this.attachEventListeners();
-        this.loadImages();
+        this.loadContent();
         this.updateDaemonStatus();
         
         // Update daemon status periodically
@@ -20,11 +22,16 @@ class GalleryApp {
     
     initializeElements() {
         this.galleryGrid = document.getElementById('galleryGrid');
+        this.folderGrid = document.getElementById('folderGrid');
         this.loading = document.getElementById('loading');
         this.noResults = document.getElementById('noResults');
         this.searchInput = document.getElementById('searchInput');
         this.refreshBtn = document.getElementById('refreshBtn');
-        this.imageCount = document.getElementById('imageCount');
+        this.totalCount = document.getElementById('totalCount');
+        
+        // View toggle elements
+        this.folderViewBtn = document.getElementById('folderViewBtn');
+        this.gridViewBtn = document.getElementById('gridViewBtn');
         
         // Daemon elements
         this.daemonBtn = document.getElementById('daemonBtn');
@@ -58,6 +65,10 @@ class GalleryApp {
     }
     
     attachEventListeners() {
+        // View toggle listeners
+        this.folderViewBtn.addEventListener('click', () => this.switchToFolderView());
+        this.gridViewBtn.addEventListener('click', () => this.switchToGridView());
+        
         // Search functionality
         let searchTimeout;
         this.searchInput.addEventListener('input', (e) => {
@@ -118,6 +129,14 @@ class GalleryApp {
         });
     }
     
+    loadContent() {
+        if (this.currentView === 'folders') {
+            this.loadFolders();
+        } else {
+            this.loadImages();
+        }
+    }
+    
     async loadImages() {
         if (this.isLoading || !this.hasMore) return;
         
@@ -143,7 +162,7 @@ class GalleryApp {
                 this.showNoResults();
             }
             
-            this.updateImageCount(data.totalCount);
+            this.updateTotalCount(data.totalCount);
             
         } catch (error) {
             console.error('Error loading images:', error);
@@ -274,6 +293,16 @@ class GalleryApp {
         this.currentPage = 1;
         this.hasMore = true;
         this.images = [];
+        this.folders = [];
+        this.galleryGrid.innerHTML = '';
+        this.folderGrid.innerHTML = '';
+        this.hideNoResults();
+    }
+    
+    resetGallery() {
+        this.currentPage = 1;
+        this.hasMore = true;
+        this.images = [];
         this.galleryGrid.innerHTML = '';
         this.hideNoResults();
     }
@@ -285,9 +314,13 @@ class GalleryApp {
             // Call refresh API
             await fetch('/api/refresh', { method: 'POST' });
             
-            // Reset and reload
+            // Reset and reload based on current view
             this.resetGallery();
-            await this.loadImages();
+            if (this.currentView === 'folders') {
+                await this.loadFolders();
+            } else {
+                await this.loadImages();
+            }
             
         } catch (error) {
             console.error('Error refreshing gallery:', error);
@@ -315,8 +348,108 @@ class GalleryApp {
         this.noResults.style.display = 'none';
     }
     
-    updateImageCount(count) {
-        this.imageCount.textContent = `${count} image${count !== 1 ? 's' : ''}`;
+    // View switching methods
+    switchToFolderView() {
+        this.currentView = 'folders';
+        this.folderViewBtn.classList.add('active');
+        this.gridViewBtn.classList.remove('active');
+        this.folderGrid.style.display = 'grid';
+        this.galleryGrid.style.display = 'none';
+        this.resetGallery();
+        this.loadFolders();
+    }
+    
+    switchToGridView() {
+        this.currentView = 'grid';
+        this.gridViewBtn.classList.add('active');
+        this.folderViewBtn.classList.remove('active');
+        this.galleryGrid.style.display = 'grid';
+        this.folderGrid.style.display = 'none';
+        this.resetGallery();
+        this.loadImages();
+    }
+    
+    // Load folders for folder view
+    async loadFolders() {
+        this.showLoading();
+        
+        try {
+            const response = await fetch('/api/folders');
+            const data = await response.json();
+            
+            this.folders = data.folders || [];
+            this.renderFolders();
+            
+        } catch (error) {
+            console.error('Error loading folders:', error);
+        } finally {
+            this.hideLoading();
+        }
+    }
+    
+    renderFolders() {
+        this.folderGrid.innerHTML = '';
+        
+        if (this.folders.length === 0) {
+            this.showNoResults();
+            return;
+        }
+        
+        this.hideNoResults();
+        
+        this.folders.forEach((folder, index) => {
+            const folderCard = this.createFolderCard(folder, index);
+            this.folderGrid.appendChild(folderCard);
+        });
+        
+        // Update count
+        this.totalCount.textContent = `${this.folders.length} folder${this.folders.length !== 1 ? 's' : ''}`;
+    }
+    
+    createFolderCard(folder, index) {
+        const div = document.createElement('div');
+        div.className = 'folder-card';
+
+        div.style.animationDelay = `${index * 100}ms`;
+        
+        let additionalImagesHtml = '';
+        if (folder.additionalImages && folder.additionalImages.length > 0) {
+            additionalImagesHtml = `
+                <div class="folder-additional-images">
+                    ${folder.additionalImages.map(img => `
+                        <img src="${img.thumbnail}" alt="${img.metadata?.filename || 'Image'}" loading="lazy">
+                    `).join('')}
+                </div>
+            `;
+        }
+        
+        div.innerHTML = `
+            <div class="folder-main-image">
+                <img src="${folder.mainImage.thumbnail}" alt="${folder.mainImage.metadata?.filename || 'Main Image'}" loading="lazy">
+            </div>
+            ${additionalImagesHtml}
+            <div class="folder-info">
+                <div class="folder-name">${folder.displayName}</div>
+                <div class="folder-count">${folder.totalCount} image${folder.totalCount !== 1 ? 's' : ''}</div>
+            </div>
+        `;
+
+        console.log(folder)
+        
+        div.addEventListener('click', () => this.openFolder(folder));
+        
+        return div;
+    }
+    
+    openFolder(folder) {
+        // Switch to grid view and filter by folder
+        this.searchTerm = `dir="${folder.directory}"`;
+        this.searchInput.value = this.searchTerm;
+        this.switchToGridView();
+    }
+
+    updateTotalCount(count) {
+        this.totalCount.textContent = `${count} image${count !== 1 ? 's' : ''}`;
     }
     
     showError(message) {

@@ -31,15 +31,28 @@
     <nav class="filters">
         <div class="container">
             <div class="filter-tabs">
-                <button class="filter-tab active" data-filter="all">All Images</button>
-                <span class="image-count" id="imageCount">0 images</span>
+                <div class="view-toggles">
+                    <button class="view-toggle active" id="folderViewBtn" data-view="folders">
+                        <i class="fas fa-folder"></i> Folders
+                    </button>
+                    <button class="view-toggle" id="gridViewBtn" data-view="grid">
+                        <i class="fas fa-th"></i> All Images
+                    </button>
+                </div>
+                <span class="total-count" id="totalCount">0 images</span>
             </div>
         </div>
     </nav>
 
     <main class="main">
         <div class="container">
-            <div class="gallery-grid" id="galleryGrid">
+            <!-- Folder View -->
+            <div class="folder-grid" id="folderGrid">
+                <!-- Folder cards will be loaded here -->
+            </div>
+            
+            <!-- Individual Images View -->
+            <div class="gallery-grid" id="galleryGrid" style="display: none;">
                 <!-- Images will be loaded here -->
             </div>
             
