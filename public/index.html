@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gallant Gallery</title>
+    <title data-i18n="app.title">壮丽画廊</title>
     <link rel="stylesheet" href="styles.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="i18n.js"></script>
 </head>
 <body>
     <header class="header">
@@ -14,16 +15,34 @@
                 <img src="logo.svg" alt="Gallant Gallery" height="40">
             </h1>
             <div class="search-container">
-                <input type="text" id="searchInput" placeholder="Search images..." class="search-input">
+                <input type="text" id="searchInput" placeholder="搜索图片..." class="search-input" data-i18n="search.placeholder">
                 <i class="fas fa-search search-icon"></i>
             </div>
-            <button id="refreshBtn" class="refresh-btn" title="Refresh Gallery">
-                <i class="fas fa-sync-alt"></i>
-            </button>
-            <button id="daemonBtn" class="daemon-btn" title="Daemon Status">
-                <i class="fas fa-robot"></i>
-                <span class="daemon-status" id="daemonStatus">●</span>
-            </button>
+            <div class="header-controls">
+                <div class="language-selector">
+                    <button id="languageBtn" class="language-btn" title="切换语言">
+                        <i class="fas fa-globe"></i>
+                        <span id="currentLanguage">中</span>
+                    </button>
+                    <div class="language-dropdown" id="languageDropdown">
+                        <div class="language-option" data-lang="zh">
+                            <span class="language-flag">🇨🇳</span>
+                            <span>中文</span>
+                        </div>
+                        <div class="language-option" data-lang="en">
+                            <span class="language-flag">🇺🇸</span>
+                            <span>English</span>
+                        </div>
+                    </div>
+                </div>
+                <button id="refreshBtn" class="refresh-btn" title="刷新画廊" data-i18n-title="refresh.tooltip">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+                <button id="daemonBtn" class="daemon-btn" title="后台进程状态" data-i18n-title="daemon.tooltip">
+                    <i class="fas fa-robot"></i>
+                    <span class="daemon-status" id="daemonStatus">●</span>
+                </button>
+            </div>
         </div>
     </header>
 
@@ -32,16 +51,16 @@
             <div class="filter-tabs">
                 <div class="view-toggles">
                     <button class="view-toggle active" id="categoryViewBtn" data-view="categories">
-                        <i class="fas fa-layer-group"></i> Categories
+                        <i class="fas fa-layer-group"></i> <span data-i18n="nav.categories">分类</span>
                     </button>
                     <button class="view-toggle" id="folderViewBtn" data-view="folders">
-                        <i class="fas fa-folder"></i> Folders
+                        <i class="fas fa-folder"></i> <span data-i18n="nav.folders">文件夹</span>
                     </button>
                     <button class="view-toggle" id="gridViewBtn" data-view="grid">
-                        <i class="fas fa-th"></i> All Images
+                        <i class="fas fa-th"></i> <span data-i18n="nav.allImages">所有图片</span>
                     </button>
                 </div>
-                <span class="total-count" id="totalCount">0 items</span>
+                <span class="total-count" id="totalCount">0 项目</span>
             </div>
         </div>
     </nav>
@@ -52,8 +71,8 @@
             <div class="category-layout" id="categoryLayout">
                 <aside class="category-sidebar" id="categorySidebar">
                     <div class="sidebar-header">
-                        <h3>Categories</h3>
-                        <input type="text" id="categorySearch" placeholder="Search categories..." class="category-search">
+                        <h3 data-i18n="category.title">分类</h3>
+                        <input type="text" id="categorySearch" placeholder="搜索分类..." class="category-search" data-i18n="category.search.placeholder">
                     </div>
                     <ul class="category-list" id="categoryList">
                         <!-- Categories will be loaded here -->
@@ -61,17 +80,17 @@
                 </aside>
                 <div class="category-content" id="categoryContent">
                     <div class="category-header" id="categoryHeader" style="display: none;">
-                        <h2 id="selectedCategoryName">Select a category</h2>
+                        <h2 id="selectedCategoryName">选择分类</h2>
                         <div class="category-stats">
-                            <span id="categoryItemCount">0 items</span>
-                            <span id="categoryImageCount">0 images</span>
+                            <span id="categoryItemCount">0 项目</span>
+                            <span id="categoryImageCount">0 图片</span>
                         </div>
                     </div>
                     <div class="items-grid" id="itemsGrid">
                         <div class="no-category-selected" id="noCategorySelected">
                             <i class="fas fa-layer-group"></i>
-                            <h3>Select a category</h3>
-                            <p>Choose a category from the sidebar to view its items</p>
+                            <h3 data-i18n="category.select">选择分类</h3>
+                            <p data-i18n="category.select.description">从侧边栏选择一个分类来查看其项目</p>
                         </div>
                     </div>
                 </div>
@@ -89,13 +108,13 @@
             
             <div class="loading" id="loading">
                 <i class="fas fa-spinner fa-spin"></i>
-                <span>Loading images...</span>
+                <span data-i18n="loading.images">加载图片中...</span>
             </div>
 
             <div class="no-results" id="noResults" style="display: none;">
                 <i class="fas fa-search"></i>
-                <h3>No images found</h3>
-                <p>Try adjusting your search terms</p>
+                <h3 data-i18n="error.noResults">未找到图片</h3>
+                <p data-i18n="error.noResults.description">请尝试调整搜索条件</p>
             </div>
         </div>
     </main>
@@ -104,15 +123,15 @@
     <div class="lightbox" id="lightbox">
         <div class="lightbox-overlay" id="lightboxOverlay"></div>
         <div class="lightbox-container">
-            <button class="lightbox-close" id="lightboxClose">
+            <button class="lightbox-close" id="lightboxClose" title="关闭" data-i18n-title="button.close">
                 <i class="fas fa-times"></i>
             </button>
             
-            <button class="lightbox-nav lightbox-prev" id="lightboxPrev">
+            <button class="lightbox-nav lightbox-prev" id="lightboxPrev" title="上一张" data-i18n-title="button.previous">
                 <i class="fas fa-chevron-left"></i>
             </button>
             
-            <button class="lightbox-nav lightbox-next" id="lightboxNext">
+            <button class="lightbox-nav lightbox-next" id="lightboxNext" title="下一张" data-i18n-title="button.next">
                 <i class="fas fa-chevron-right"></i>
             </button>
             
@@ -124,19 +143,19 @@
                         <h3 class="image-title" id="imageTitle"></h3>
                         <div class="metadata-grid">
                             <div class="metadata-item">
-                                <span class="metadata-label">Size:</span>
+                                <span class="metadata-label" data-i18n="lightbox.size">大小:</span>
                                 <span class="metadata-value" id="imageSize"></span>
                             </div>
                             <div class="metadata-item">
-                                <span class="metadata-label">Dimensions:</span>
+                                <span class="metadata-label" data-i18n="lightbox.dimensions">尺寸:</span>
                                 <span class="metadata-value" id="imageDimensions"></span>
                             </div>
                             <div class="metadata-item">
-                                <span class="metadata-label">Format:</span>
+                                <span class="metadata-label" data-i18n="lightbox.format">格式:</span>
                                 <span class="metadata-value" id="imageFormat"></span>
                             </div>
                             <div class="metadata-item">
-                                <span class="metadata-label">Directory:</span>
+                                <span class="metadata-label" data-i18n="lightbox.directory">目录:</span>
                                 <span class="metadata-value" id="imageDirectory"></span>
                             </div>
                         </div>
@@ -151,7 +170,7 @@
         <div class="daemon-modal-overlay" id="daemonModalOverlay"></div>
         <div class="daemon-modal-container">
             <div class="daemon-modal-header">
-                <h3><i class="fas fa-robot"></i> Thumbnail Daemon</h3>
+                <h3><i class="fas fa-robot"></i> <span data-i18n="daemon.title">缩略图守护进程</span></h3>
                 <button class="daemon-modal-close" id="daemonModalClose">
                     <i class="fas fa-times"></i>
                 </button>
@@ -159,42 +178,42 @@
             <div class="daemon-modal-content">
                 <div class="daemon-status-info">
                     <div class="status-item">
-                        <span class="status-label">Status:</span>
-                        <span class="status-value" id="daemonStatusText">Loading...</span>
+                        <span class="status-label" data-i18n="daemon.status">状态:</span>
+                        <span class="status-value" id="daemonStatusText">加载中...</span>
                     </div>
                     <div class="status-item">
-                        <span class="status-label">Watching:</span>
+                        <span class="status-label" data-i18n="daemon.watching">监视目录:</span>
                         <span class="status-value" id="daemonDirectory">-</span>
                     </div>
                     <div class="status-item">
-                        <span class="status-label">Processing Queue:</span>
+                        <span class="status-label" data-i18n="daemon.queue">处理队列:</span>
                         <span class="status-value" id="daemonQueue">-</span>
                     </div>
                     <div class="status-item">
-                        <span class="status-label">Index Entries:</span>
+                        <span class="status-label" data-i18n="daemon.indexEntries">索引条目:</span>
                         <span class="status-value" id="indexEntries">-</span>
                     </div>
                     <div class="status-item">
-                        <span class="status-label">Metadata Cache:</span>
+                        <span class="status-label" data-i18n="daemon.metadataCache">元数据缓存:</span>
                         <span class="status-value" id="metadataCache">-</span>
                     </div>
                     <div class="status-item">
-                        <span class="status-label">Thumbnail Index:</span>
+                        <span class="status-label" data-i18n="daemon.thumbnailIndex">缩略图索引:</span>
                         <span class="status-value" id="thumbnailIndexCount">-</span>
                     </div>
                 </div>
                 <div class="daemon-controls">
                     <button class="daemon-control-btn" id="startDaemonBtn">
-                        <i class="fas fa-play"></i> Start Daemon
+                        <i class="fas fa-play"></i> <span data-i18n="daemon.start">启动守护进程</span>
                     </button>
                     <button class="daemon-control-btn" id="stopDaemonBtn">
-                        <i class="fas fa-stop"></i> Stop Daemon
+                        <i class="fas fa-stop"></i> <span data-i18n="daemon.stop">停止守护进程</span>
                     </button>
                     <button class="daemon-control-btn" id="generateAllBtn">
-                        <i class="fas fa-images"></i> Generate All Thumbnails
+                        <i class="fas fa-images"></i> <span data-i18n="daemon.generateAll">生成所有缩略图</span>
                     </button>
                     <button class="daemon-control-btn" id="rebuildIndexBtn">
-                        <i class="fas fa-database"></i> Rebuild Index
+                        <i class="fas fa-database"></i> <span data-i18n="daemon.rebuildIndex">重建索引</span>
                     </button>
                 </div>
             </div>

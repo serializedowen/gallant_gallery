@@ -15,6 +15,7 @@ class GalleryApp {
     this.selectedItem = null;
 
     this.initializeElements();
+    this.initializeI18n();
     this.attachEventListeners();
     this.loadContent();
     this.updateDaemonStatus();
@@ -23,6 +24,54 @@ class GalleryApp {
     setInterval(() => {
       this.updateDaemonStatus();
     }, 5000);
+  }
+
+  initializeI18n() {
+    // Initialize the UI with current language
+    window.i18n.updateUI();
+    
+    // Listen for language changes
+    document.addEventListener('languageChanged', () => {
+      this.updateUIForLanguageChange();
+    });
+  }
+
+  updateUIForLanguageChange() {
+    // Update search placeholder
+    this.searchInput.placeholder = window.i18n.t('search.placeholder');
+    this.categorySearch.placeholder = window.i18n.t('category.search.placeholder');
+    
+    // Update loading text
+    const loadingSpan = this.loading.querySelector('span');
+    if (loadingSpan) {
+      loadingSpan.textContent = window.i18n.t('loading.images');
+    }
+    
+    // Update current language display
+    this.updateLanguageDisplay();
+    
+    // Re-render categories if they're loaded
+    if (this.categories.length > 0) {
+      this.renderCategories(this.categories);
+    }
+    
+    // Update total count display
+    if (this.totalCount.textContent) {
+      // Re-trigger count update to use new language
+      const currentCount = parseInt(this.totalCount.textContent.match(/\d+/)?.[0] || '0');
+      let type = 'images';
+      if (this.currentView === 'categories') type = 'categories';
+      else if (this.currentView === 'folders') type = 'folders';
+      this.updateTotalCount(currentCount, type);
+    }
+  }
+
+  updateLanguageDisplay() {
+    const currentLang = window.i18n.getCurrentLanguage();
+    const currentLanguageSpan = document.getElementById('currentLanguage');
+    if (currentLanguageSpan) {
+      currentLanguageSpan.textContent = currentLang === 'zh' ? '中' : 'EN';
+    }
   }
 
   initializeElements() {
@@ -49,6 +98,11 @@ class GalleryApp {
     this.categoryViewBtn = document.getElementById('categoryViewBtn');
     this.folderViewBtn = document.getElementById('folderViewBtn');
     this.gridViewBtn = document.getElementById('gridViewBtn');
+
+    // Language selector elements
+    this.languageBtn = document.getElementById('languageBtn');
+    this.languageDropdown = document.getElementById('languageDropdown');
+    this.currentLanguage = document.getElementById('currentLanguage');
 
     // Daemon elements
     this.daemonBtn = document.getElementById('daemonBtn');
@@ -115,6 +169,25 @@ class GalleryApp {
     // Refresh button
     this.refreshBtn.addEventListener('click', () => {
       this.refreshGallery();
+    });
+
+    // Language selector events
+    this.languageBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleLanguageDropdown();
+    });
+
+    // Close language dropdown when clicking outside
+    document.addEventListener('click', () => {
+      this.closeLanguageDropdown();
+    });
+
+    // Language option events
+    document.querySelectorAll('.language-option').forEach(option => {
+      option.addEventListener('click', (e) => {
+        const lang = e.currentTarget.getAttribute('data-lang');
+        this.changeLanguage(lang);
+      });
     });
 
     // Daemon button
@@ -188,6 +261,7 @@ class GalleryApp {
     if (this.isLoading) return;
 
     this.isLoading = true;
+    this.updateLoadingText('categories');
     this.showLoading();
 
     try {
@@ -203,7 +277,7 @@ class GalleryApp {
       }
     } catch (error) {
       console.error('Error loading categories:', error);
-      this.showError('Failed to load categories');
+      this.showError(window.i18n.t('error.loadCategories'));
     } finally {
       this.isLoading = false;
       this.hideLoading();
@@ -221,9 +295,12 @@ class GalleryApp {
       link.className = 'category-link';
       link.onclick = () => this.selectCategory(category);
       
+      const itemText = window.i18n.formatCount(category.itemCount, 'items');
+      const imageText = window.i18n.formatCount(category.imageCount, 'images');
+      
       link.innerHTML = `
         <div class="category-name">${category.name}</div>
-        <div class="category-stats">${category.itemCount} items • ${category.imageCount} images</div>
+        <div class="category-stats">${itemText} • ${imageText}</div>
       `;
       
       listItem.appendChild(link);
@@ -248,8 +325,8 @@ class GalleryApp {
 
     this.selectedCategory = category;
     this.selectedCategoryName.textContent = category.name;
-    this.categoryItemCount.textContent = `${category.itemCount} items`;
-    this.categoryImageCount.textContent = `${category.imageCount} images`;
+    this.categoryItemCount.textContent = window.i18n.formatCount(category.itemCount, 'items');
+    this.categoryImageCount.textContent = window.i18n.formatCount(category.imageCount, 'images');
     this.categoryHeader.style.display = 'block';
     this.noCategorySelected.style.display = 'none';
 
@@ -261,6 +338,7 @@ class GalleryApp {
     if (this.isLoading) return;
 
     this.isLoading = true;
+    this.updateLoadingText('items');
     this.showLoading();
 
     try {
@@ -271,11 +349,11 @@ class GalleryApp {
         this.currentItems = data.items;
         this.renderItems(data.items);
       } else {
-        this.itemsGrid.innerHTML = '<div class="no-results">No items found in this category</div>';
+        this.itemsGrid.innerHTML = `<div class="no-results">${window.i18n.t('category.noItems')}</div>`;
       }
     } catch (error) {
       console.error('Error loading category items:', error);
-      this.showError('Failed to load category items');
+      this.showError(window.i18n.t('error.loadItems'));
     } finally {
       this.isLoading = false;
       this.hideLoading();
@@ -296,11 +374,13 @@ class GalleryApp {
     div.className = 'item-card';
     div.onclick = () => this.viewItemImages(item);
     
+    const imageText = window.i18n.formatCount(item.imageCount, 'images');
+    
     div.innerHTML = `
       <img class="item-thumbnail" src="${item.mainImage.thumbnail}" alt="${item.name}" loading="lazy">
       <div class="item-info">
         <h3 class="item-name">${item.name}</h3>
-        <div class="item-stats">${item.imageCount} images</div>
+        <div class="item-stats">${imageText}</div>
       </div>
     `;
     
@@ -321,7 +401,7 @@ class GalleryApp {
       }
     } catch (error) {
       console.error('Error loading item images:', error);
-      this.showError('Failed to load item images');
+      this.showError(window.i18n.t('error.loadImages'));
     }
   }
 
@@ -353,7 +433,7 @@ class GalleryApp {
       this.updateTotalCount(data.totalCount);
     } catch (error) {
       console.error('Error loading images:', error);
-      this.showError('Failed to load images');
+      this.showError(window.i18n.t('error.loadImages'));
     } finally {
       this.isLoading = false;
       this.hideLoading();
@@ -549,6 +629,37 @@ class GalleryApp {
     this.noResults.style.display = 'none';
   }
 
+  // Language methods
+  toggleLanguageDropdown() {
+    this.languageDropdown.classList.toggle('show');
+  }
+
+  closeLanguageDropdown() {
+    this.languageDropdown.classList.remove('show');
+  }
+
+  changeLanguage(lang) {
+    window.i18n.setLanguage(lang);
+    this.closeLanguageDropdown();
+  }
+
+  // Update loading text based on current context
+  updateLoadingText(context = 'images') {
+    const loadingSpan = this.loading.querySelector('span');
+    if (loadingSpan) {
+      switch (context) {
+        case 'categories':
+          loadingSpan.textContent = window.i18n.t('loading.categories');
+          break;
+        case 'items':
+          loadingSpan.textContent = window.i18n.t('loading.items');
+          break;
+        default:
+          loadingSpan.textContent = window.i18n.t('loading.images');
+      }
+    }
+  }
+
   // View switching methods
   switchToCategoryView() {
     this.currentView = 'categories';
@@ -721,21 +832,7 @@ class GalleryApp {
   }
 
   updateTotalCount(count, type = 'images') {
-    let text;
-    switch (type) {
-      case 'categories':
-        text = `${count} categor${count !== 1 ? 'ies' : 'y'}`;
-        break;
-      case 'items':
-        text = `${count} item${count !== 1 ? 's' : ''}`;
-        break;
-      case 'folders':
-        text = `${count} folder${count !== 1 ? 's' : ''}`;
-        break;
-      default:
-        text = `${count} image${count !== 1 ? 's' : ''}`;
-    }
-    this.totalCount.textContent = text;
+    this.totalCount.textContent = window.i18n.formatCount(count, type);
   }
 
   showError(message) {
@@ -761,13 +858,13 @@ class GalleryApp {
       // Update modal content if open
       if (this.daemonModal.classList.contains('active')) {
         this.daemonStatusText.textContent = data.isWatching
-          ? 'Active'
-          : 'Inactive';
+          ? window.i18n.t('daemon.status.running')
+          : window.i18n.t('daemon.status.stopped');
         this.daemonDirectory.textContent = data.watchedDirectory;
         this.daemonQueue.textContent =
           data.processingQueue.length > 0
             ? data.processingQueue.join(', ')
-            : 'Empty';
+            : window.i18n.t('daemon.queue.empty') || 'Empty';
 
         // Update index information
         if (data.thumbnailIndex) {
