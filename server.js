@@ -1,5 +1,5 @@
 const express = require('express');
-const Jimp = require('jimp');
+const sharp = require('sharp');
 const fs = require('fs-extra');
 const path = require('path');
 const NodeCache = require('node-cache');
@@ -187,8 +187,13 @@ async function generateThumbnail(
 
     console.log(`Generating thumbnail for ${path.basename(imagePath)}...`);
 
-    const image = await Jimp.read(imagePath);
-    await image.cover(size, size).quality(80).writeAsync(thumbnailPath);
+    await sharp(imagePath)
+      .resize(size, size, {
+        fit: 'cover',
+        position: 'center'
+      })
+      .jpeg({ quality: 80 })
+      .toFile(thumbnailPath);
 
     // Get metadata and update the thumbnail index
     const metadata = await getImageMetadataInternal(imagePath);
@@ -211,15 +216,15 @@ async function getImageMetadataInternal(imagePath) {
   try {
     const stats = await fs.stat(imagePath);
 
-    // For basic metadata, we'll use Jimp to get dimensions
+    // Use Sharp to get image dimensions and metadata
     let width, height, format;
     try {
-      const image = await Jimp.read(imagePath);
-      width = image.bitmap.width;
-      height = image.bitmap.height;
-      format = image.getMIME().split('/')[1];
+      const metadata = await sharp(imagePath).metadata();
+      width = metadata.width;
+      height = metadata.height;
+      format = metadata.format;
     } catch (e) {
-      // Fallback if Jimp can't read the image
+      // Fallback if Sharp can't read the image
       width = null;
       height = null;
       format = path.extname(imagePath).slice(1).toLowerCase();
