@@ -4,10 +4,15 @@ class GalleryApp {
     this.isLoading = false;
     this.hasMore = true;
     this.searchTerm = '';
+    this.categorySearch = '';
     this.images = [];
     this.folders = [];
+    this.categories = [];
+    this.currentItems = [];
     this.currentImageIndex = 0;
-    this.currentView = 'folders'; // 'folders' or 'grid'
+    this.currentView = 'categories'; // 'categories', 'folders', or 'grid'
+    this.selectedCategory = null;
+    this.selectedItem = null;
 
     this.initializeElements();
     this.attachEventListeners();
@@ -23,13 +28,25 @@ class GalleryApp {
   initializeElements() {
     this.galleryGrid = document.getElementById('galleryGrid');
     this.folderGrid = document.getElementById('folderGrid');
+    this.categoryLayout = document.getElementById('categoryLayout');
+    this.categorySidebar = document.getElementById('categorySidebar');
+    this.categoryContent = document.getElementById('categoryContent');
+    this.categoryList = document.getElementById('categoryList');
+    this.itemsGrid = document.getElementById('itemsGrid');
+    this.categoryHeader = document.getElementById('categoryHeader');
+    this.selectedCategoryName = document.getElementById('selectedCategoryName');
+    this.categoryItemCount = document.getElementById('categoryItemCount');
+    this.categoryImageCount = document.getElementById('categoryImageCount');
+    this.noCategorySelected = document.getElementById('noCategorySelected');
     this.loading = document.getElementById('loading');
     this.noResults = document.getElementById('noResults');
     this.searchInput = document.getElementById('searchInput');
+    this.categorySearch = document.getElementById('categorySearch');
     this.refreshBtn = document.getElementById('refreshBtn');
     this.totalCount = document.getElementById('totalCount');
 
     // View toggle elements
+    this.categoryViewBtn = document.getElementById('categoryViewBtn');
     this.folderViewBtn = document.getElementById('folderViewBtn');
     this.gridViewBtn = document.getElementById('gridViewBtn');
 
@@ -66,6 +83,9 @@ class GalleryApp {
 
   attachEventListeners() {
     // View toggle listeners
+    this.categoryViewBtn.addEventListener('click', () =>
+      this.switchToCategoryView()
+    );
     this.folderViewBtn.addEventListener('click', () =>
       this.switchToFolderView()
     );
@@ -79,6 +99,16 @@ class GalleryApp {
         this.searchTerm = e.target.value.trim();
         this.resetGallery();
         this.loadImages();
+      }, 300);
+    });
+
+    // Category search functionality
+    let categorySearchTimeout;
+    this.categorySearch.addEventListener('input', (e) => {
+      clearTimeout(categorySearchTimeout);
+      categorySearchTimeout = setTimeout(() => {
+        this.categorySearchTerm = e.target.value.trim();
+        this.filterCategories();
       }, 300);
     });
 
@@ -145,10 +175,153 @@ class GalleryApp {
   }
 
   loadContent() {
-    if (this.currentView === 'folders') {
+    if (this.currentView === 'categories') {
+      this.loadCategories();
+    } else if (this.currentView === 'folders') {
       this.loadFolders();
     } else {
       this.loadImages();
+    }
+  }
+
+  async loadCategories() {
+    if (this.isLoading) return;
+
+    this.isLoading = true;
+    this.showLoading();
+
+    try {
+      const response = await fetch('/api/categories');
+      const data = await response.json();
+
+      if (data.categories) {
+        this.categories = data.categories;
+        this.renderCategories(data.categories);
+        this.updateTotalCount(data.totalCategories, 'categories');
+      } else {
+        this.showNoResults();
+      }
+    } catch (error) {
+      console.error('Error loading categories:', error);
+      this.showError('Failed to load categories');
+    } finally {
+      this.isLoading = false;
+      this.hideLoading();
+    }
+  }
+
+  renderCategories(categories) {
+    this.categoryList.innerHTML = '';
+    
+    categories.forEach(category => {
+      const listItem = document.createElement('li');
+      listItem.className = 'category-item';
+      
+      const link = document.createElement('div');
+      link.className = 'category-link';
+      link.onclick = () => this.selectCategory(category);
+      
+      link.innerHTML = `
+        <div class="category-name">${category.name}</div>
+        <div class="category-stats">${category.itemCount} items • ${category.imageCount} images</div>
+      `;
+      
+      listItem.appendChild(link);
+      this.categoryList.appendChild(listItem);
+    });
+  }
+
+  filterCategories() {
+    const searchTerm = this.categorySearchTerm.toLowerCase();
+    const filteredCategories = this.categories.filter(category =>
+      category.name.toLowerCase().includes(searchTerm)
+    );
+    this.renderCategories(filteredCategories);
+  }
+
+  async selectCategory(category) {
+    // Update UI to show selected category
+    document.querySelectorAll('.category-link').forEach(link => {
+      link.classList.remove('active');
+    });
+    event.target.closest('.category-link').classList.add('active');
+
+    this.selectedCategory = category;
+    this.selectedCategoryName.textContent = category.name;
+    this.categoryItemCount.textContent = `${category.itemCount} items`;
+    this.categoryImageCount.textContent = `${category.imageCount} images`;
+    this.categoryHeader.style.display = 'block';
+    this.noCategorySelected.style.display = 'none';
+
+    // Load items for this category
+    await this.loadCategoryItems(category.path);
+  }
+
+  async loadCategoryItems(categoryPath) {
+    if (this.isLoading) return;
+
+    this.isLoading = true;
+    this.showLoading();
+
+    try {
+      const response = await fetch(`/api/categories/${encodeURIComponent(categoryPath)}/items`);
+      const data = await response.json();
+
+      if (data.items) {
+        this.currentItems = data.items;
+        this.renderItems(data.items);
+      } else {
+        this.itemsGrid.innerHTML = '<div class="no-results">No items found in this category</div>';
+      }
+    } catch (error) {
+      console.error('Error loading category items:', error);
+      this.showError('Failed to load category items');
+    } finally {
+      this.isLoading = false;
+      this.hideLoading();
+    }
+  }
+
+  renderItems(items) {
+    this.itemsGrid.innerHTML = '';
+    
+    items.forEach(item => {
+      const itemElement = this.createItemElement(item);
+      this.itemsGrid.appendChild(itemElement);
+    });
+  }
+
+  createItemElement(item) {
+    const div = document.createElement('div');
+    div.className = 'item-card';
+    div.onclick = () => this.viewItemImages(item);
+    
+    div.innerHTML = `
+      <img class="item-thumbnail" src="${item.mainImage.thumbnail}" alt="${item.name}" loading="lazy">
+      <div class="item-info">
+        <h3 class="item-name">${item.name}</h3>
+        <div class="item-stats">${item.imageCount} images</div>
+      </div>
+    `;
+    
+    return div;
+  }
+
+  async viewItemImages(item) {
+    this.selectedItem = item;
+    
+    try {
+      const response = await fetch(`/api/items/${encodeURIComponent(item.category)}/${encodeURIComponent(item.name)}/images`);
+      const data = await response.json();
+
+      if (data.images && data.images.length > 0) {
+        this.images = data.images;
+        this.currentImageIndex = 0;
+        this.openLightbox(0);
+      }
+    } catch (error) {
+      console.error('Error loading item images:', error);
+      this.showError('Failed to load item images');
     }
   }
 
@@ -323,16 +496,14 @@ class GalleryApp {
     this.hasMore = true;
     this.images = [];
     this.folders = [];
+    this.categories = [];
+    this.currentItems = [];
     this.galleryGrid.innerHTML = '';
     this.folderGrid.innerHTML = '';
-    this.hideNoResults();
-  }
-
-  resetGallery() {
-    this.currentPage = 1;
-    this.hasMore = true;
-    this.images = [];
-    this.galleryGrid.innerHTML = '';
+    this.categoryList.innerHTML = '';
+    this.itemsGrid.innerHTML = '';
+    this.selectedCategory = null;
+    this.selectedItem = null;
     this.hideNoResults();
   }
 
@@ -345,7 +516,9 @@ class GalleryApp {
 
       // Reset and reload based on current view
       this.resetGallery();
-      if (this.currentView === 'folders') {
+      if (this.currentView === 'categories') {
+        await this.loadCategories();
+      } else if (this.currentView === 'folders') {
         await this.loadFolders();
       } else {
         await this.loadImages();
@@ -377,10 +550,24 @@ class GalleryApp {
   }
 
   // View switching methods
+  switchToCategoryView() {
+    this.currentView = 'categories';
+    this.categoryViewBtn.classList.add('active');
+    this.folderViewBtn.classList.remove('active');
+    this.gridViewBtn.classList.remove('active');
+    this.categoryLayout.style.display = 'flex';
+    this.folderGrid.style.display = 'none';
+    this.galleryGrid.style.display = 'none';
+    this.resetGallery();
+    this.loadCategories();
+  }
+
   switchToFolderView() {
     this.currentView = 'folders';
+    this.categoryViewBtn.classList.remove('active');
     this.folderViewBtn.classList.add('active');
     this.gridViewBtn.classList.remove('active');
+    this.categoryLayout.style.display = 'none';
     this.folderGrid.style.display = 'grid';
     this.galleryGrid.style.display = 'none';
     this.resetGallery();
@@ -389,8 +576,10 @@ class GalleryApp {
 
   switchToGridView() {
     this.currentView = 'grid';
+    this.categoryViewBtn.classList.remove('active');
     this.gridViewBtn.classList.add('active');
     this.folderViewBtn.classList.remove('active');
+    this.categoryLayout.style.display = 'none';
     this.galleryGrid.style.display = 'grid';
     this.folderGrid.style.display = 'none';
     this.resetGallery();
@@ -531,8 +720,22 @@ class GalleryApp {
     this.switchToGridView();
   }
 
-  updateTotalCount(count) {
-    this.totalCount.textContent = `${count} image${count !== 1 ? 's' : ''}`;
+  updateTotalCount(count, type = 'images') {
+    let text;
+    switch (type) {
+      case 'categories':
+        text = `${count} categor${count !== 1 ? 'ies' : 'y'}`;
+        break;
+      case 'items':
+        text = `${count} item${count !== 1 ? 's' : ''}`;
+        break;
+      case 'folders':
+        text = `${count} folder${count !== 1 ? 's' : ''}`;
+        break;
+      default:
+        text = `${count} image${count !== 1 ? 's' : ''}`;
+    }
+    this.totalCount.textContent = text;
   }
 
   showError(message) {

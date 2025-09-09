@@ -31,22 +31,54 @@
         <div class="container">
             <div class="filter-tabs">
                 <div class="view-toggles">
-                    <button class="view-toggle active" id="folderViewBtn" data-view="folders">
+                    <button class="view-toggle active" id="categoryViewBtn" data-view="categories">
+                        <i class="fas fa-layer-group"></i> Categories
+                    </button>
+                    <button class="view-toggle" id="folderViewBtn" data-view="folders">
                         <i class="fas fa-folder"></i> Folders
                     </button>
                     <button class="view-toggle" id="gridViewBtn" data-view="grid">
                         <i class="fas fa-th"></i> All Images
                     </button>
                 </div>
-                <span class="total-count" id="totalCount">0 images</span>
+                <span class="total-count" id="totalCount">0 items</span>
             </div>
         </div>
     </nav>
 
     <main class="main">
         <div class="container">
+            <!-- Category View with Sidebar -->
+            <div class="category-layout" id="categoryLayout">
+                <aside class="category-sidebar" id="categorySidebar">
+                    <div class="sidebar-header">
+                        <h3>Categories</h3>
+                        <input type="text" id="categorySearch" placeholder="Search categories..." class="category-search">
+                    </div>
+                    <ul class="category-list" id="categoryList">
+                        <!-- Categories will be loaded here -->
+                    </ul>
+                </aside>
+                <div class="category-content" id="categoryContent">
+                    <div class="category-header" id="categoryHeader" style="display: none;">
+                        <h2 id="selectedCategoryName">Select a category</h2>
+                        <div class="category-stats">
+                            <span id="categoryItemCount">0 items</span>
+                            <span id="categoryImageCount">0 images</span>
+                        </div>
+                    </div>
+                    <div class="items-grid" id="itemsGrid">
+                        <div class="no-category-selected" id="noCategorySelected">
+                            <i class="fas fa-layer-group"></i>
+                            <h3>Select a category</h3>
+                            <p>Choose a category from the sidebar to view its items</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
             <!-- Folder View -->
-            <div class="folder-grid" id="folderGrid">
+            <div class="folder-grid" id="folderGrid" style="display: none;">
                 <!-- Folder cards will be loaded here -->
             </div>
             

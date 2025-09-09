@@ -280,7 +280,7 @@ async function getImageMetadata(imagePath) {
   }
 }
 
-// Recursively scan directory for images
+// Recursively scan directory for images with category structure
 async function scanImagesDirectory(dirPath, relativePath = '') {
   const images = [];
 
@@ -311,6 +311,68 @@ async function scanImagesDirectory(dirPath, relativePath = '') {
   return images;
 }
 
+// Scan for categories (immediate subfolders of IMAGES_DIR)
+async function scanCategories() {
+  const categories = [];
+
+  try {
+    const items = await fs.readdir(IMAGES_DIR);
+
+    for (const item of items) {
+      const fullPath = path.join(IMAGES_DIR, item);
+      const stats = await fs.stat(fullPath);
+
+      if (stats.isDirectory()) {
+        categories.push({
+          name: item,
+          path: item,
+          fullPath: fullPath,
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Error scanning categories:', error);
+  }
+
+  return categories.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// Scan for items within a category (subfolders of category)
+async function scanCategoryItems(categoryPath) {
+  const items = [];
+
+  try {
+    const fullCategoryPath = path.join(IMAGES_DIR, categoryPath);
+    const itemNames = await fs.readdir(fullCategoryPath);
+
+    for (const itemName of itemNames) {
+      const itemFullPath = path.join(fullCategoryPath, itemName);
+      const stats = await fs.stat(itemFullPath);
+
+      if (stats.isDirectory()) {
+        // Scan for images in this item folder
+        const itemRelativePath = path.join(categoryPath, itemName);
+        const images = await scanImagesDirectory(itemFullPath, itemRelativePath);
+
+        if (images.length > 0) {
+          items.push({
+            name: itemName,
+            path: itemRelativePath.replace(/\\/g, '/'),
+            fullPath: itemFullPath,
+            category: categoryPath,
+            images: images,
+            imageCount: images.length,
+          });
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error scanning category items:', error);
+  }
+
+  return items.sort((a, b) => a.name.localeCompare(b.name));
+}
+
 // Get all images with caching
 async function getAllImages() {
   const cacheKey = 'all_images';
@@ -324,6 +386,36 @@ async function getAllImages() {
   }
 
   return images;
+}
+
+// Get all categories with caching
+async function getAllCategories() {
+  const cacheKey = 'all_categories';
+  let categories = cache.get(cacheKey);
+
+  if (!categories) {
+    console.log('Scanning categories...');
+    categories = await scanCategories();
+    cache.set(cacheKey, categories);
+    console.log(`Found ${categories.length} categories`);
+  }
+
+  return categories;
+}
+
+// Get items for a specific category with caching
+async function getCategoryItems(categoryPath) {
+  const cacheKey = `category_items_${categoryPath}`;
+  let items = cache.get(cacheKey);
+
+  if (!items) {
+    console.log(`Scanning items for category: ${categoryPath}`);
+    items = await scanCategoryItems(categoryPath);
+    cache.set(cacheKey, items);
+    console.log(`Found ${items.length} items in category ${categoryPath}`);
+  }
+
+  return items;
 }
 
 // File watcher daemon for automatic thumbnail generation
@@ -426,6 +518,13 @@ class ThumbnailDaemon {
 
         // Clear cache to force refresh on next request
         cache.del('all_images');
+        cache.del('all_categories');
+        // Clear category-specific caches
+        const relativePath = path.relative(IMAGES_DIR, filePath);
+        const pathParts = relativePath.split(path.sep);
+        if (pathParts.length >= 1) {
+          cache.del(`category_items_${pathParts[0]}`);
+        }
         console.log('🔄 Image cache cleared');
       } else {
         console.log(`❌ Failed to generate thumbnail for: ${normalizedPath}`);
@@ -458,6 +557,12 @@ class ThumbnailDaemon {
 
       // Clear cache to force refresh
       cache.del('all_images');
+      cache.del('all_categories');
+      // Clear category-specific caches
+      const pathParts = normalizedPath.split('/');
+      if (pathParts.length >= 1) {
+        cache.del(`category_items_${pathParts[0]}`);
+      }
       console.log('🔄 Image cache cleared');
     } catch (error) {
       console.error(`Error handling deletion of ${normalizedPath}:`, error);
@@ -543,7 +648,165 @@ const thumbnailDaemon = new ThumbnailDaemon();
 
 // API Routes
 
-// Get images with pagination and search and folder filtering
+// Get all categories
+app.get('/api/categories', async (req, res) => {
+  try {
+    const categories = await getAllCategories();
+    
+    // Get item count for each category
+    const categoriesWithCounts = await Promise.all(
+      categories.map(async (category) => {
+        const items = await getCategoryItems(category.path);
+        const totalImages = items.reduce((sum, item) => sum + item.imageCount, 0);
+        
+        return {
+          name: category.name,
+          path: category.path,
+          itemCount: items.length,
+          imageCount: totalImages,
+        };
+      })
+    );
+
+    res.json({
+      categories: categoriesWithCounts,
+      totalCategories: categoriesWithCounts.length,
+    });
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get items for a specific category
+app.get('/api/categories/:categoryPath/items', async (req, res) => {
+  try {
+    const categoryPath = decodeURIComponent(req.params.categoryPath);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const search = req.query.search || '';
+
+    const items = await getCategoryItems(categoryPath);
+
+    // Filter by search term if provided
+    let filteredItems = items;
+    if (search) {
+      filteredItems = items.filter(item =>
+        item.name.toLowerCase().includes(search.toLowerCase())
+      );
+    }
+
+    // Pagination
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    const paginatedItems = filteredItems.slice(startIndex, endIndex);
+
+    // Generate thumbnails and metadata for items
+    const itemsWithThumbnails = await Promise.all(
+      paginatedItems.map(async (item) => {
+        // Get the first image as the main thumbnail
+        const mainImage = item.images[0];
+        const { id: thumbnailId, thumbnailPath } = getThumbnailInfo(mainImage.path);
+
+        // Generate thumbnail if needed
+        const isUpToDate = await isImageUpToDate(mainImage.fullPath, thumbnailPath);
+        if (!isUpToDate) {
+          await generateThumbnail(mainImage.fullPath, thumbnailPath);
+        }
+
+        const metadata = await getImageMetadata(mainImage.fullPath);
+
+        return {
+          name: item.name,
+          path: item.path,
+          category: item.category,
+          imageCount: item.imageCount,
+          mainImage: {
+            id: thumbnailId,
+            path: mainImage.path,
+            thumbnail: `/thumbnails/${thumbnailId}`,
+            metadata: metadata,
+          },
+        };
+      })
+    );
+
+    res.json({
+      items: itemsWithThumbnails,
+      totalCount: filteredItems.length,
+      page,
+      limit,
+      hasMore: endIndex < filteredItems.length,
+      category: categoryPath,
+    });
+  } catch (error) {
+    console.error('Error fetching category items:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get images for a specific item
+app.get('/api/items/:categoryPath/:itemName/images', async (req, res) => {
+  try {
+    const categoryPath = decodeURIComponent(req.params.categoryPath);
+    const itemName = decodeURIComponent(req.params.itemName);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+
+    const items = await getCategoryItems(categoryPath);
+    const item = items.find(i => i.name === itemName);
+
+    if (!item) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
+    // Pagination
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    const paginatedImages = item.images.slice(startIndex, endIndex);
+
+    // Generate thumbnails and metadata for images
+    const imagesWithThumbnails = await Promise.all(
+      paginatedImages.map(async (img) => {
+        const { id: thumbnailId, thumbnailPath } = getThumbnailInfo(img.path);
+
+        // Generate thumbnail if needed
+        const isUpToDate = await isImageUpToDate(img.fullPath, thumbnailPath);
+        if (!isUpToDate) {
+          await generateThumbnail(img.fullPath, thumbnailPath);
+        }
+
+        const metadata = await getImageMetadata(img.fullPath);
+
+        return {
+          id: thumbnailId,
+          path: img.path,
+          thumbnail: `/thumbnails/${thumbnailId}`,
+          directory: img.directory,
+          metadata: metadata,
+        };
+      })
+    );
+
+    res.json({
+      images: imagesWithThumbnails,
+      totalCount: item.images.length,
+      page,
+      limit,
+      hasMore: endIndex < item.images.length,
+      item: {
+        name: item.name,
+        path: item.path,
+        category: item.category,
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching item images:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get images with pagination and search and folder filtering (legacy support)
 app.get('/api/images', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
@@ -799,7 +1062,12 @@ app.post('/api/refresh', async (req, res) => {
   try {
     cache.flushAll();
     const images = await getAllImages();
-    res.json({ message: 'Cache refreshed', count: images.length });
+    const categories = await getAllCategories();
+    res.json({ 
+      message: 'Cache refreshed', 
+      imageCount: images.length,
+      categoryCount: categories.length 
+    });
   } catch (error) {
     console.error('Error refreshing cache:', error);
     res.status(500).json({ error: 'Internal server error' });
