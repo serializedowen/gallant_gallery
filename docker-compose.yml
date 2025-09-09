@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  gallant-gallery:
+    build: .
+    ports:
+      - "${GALLERY_PORT:-3000}:3000"
+    environment:
+      - PORT=3000
+      - IMAGES_DIR=/app/images
+      - NODE_ENV=production
+    volumes:
+      # Mount images directory as read-only
+      - "${IMAGES_PATH:-./images}:/app/images:ro"
+      # Mount cache directory as read-write
+      - "${CACHE_PATH:-./cache}:/app/cache:rw"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # Resource limits for better container management
+    deploy:
+      resources:
+        limits:
+          memory: 4GB
+        reservations:
+          memory: 4GB
