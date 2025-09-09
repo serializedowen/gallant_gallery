@@ -1,0 +1,5 @@
+i need to make following changes to my project structure and code:
+
+- i need a slideshow in folder view for each folder, allowing users to switch between main img and 5 addditional imgs.
+  - on the bottom right corner of the slideshow, show the current index and total count, e.g. "1/6" 
+- the main image should be the one in folder with name "main" or "封面", if not found, use the first image in the folder.

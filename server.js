@@ -9,8 +9,8 @@ const chokidar = require('chokidar');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const IMAGES_DIR = process.env.IMAGES_DIR || './images';
-const THUMBNAILS_DIR = './thumbnails';
 const CACHE_DIR = './cache';
+const THUMBNAILS_DIR = path.join(CACHE_DIR, 'thumbnails');
 const THUMBNAIL_INDEX_FILE = path.join(CACHE_DIR, 'thumbnail-index.json');
 
 // Cache for 1 hour
@@ -20,8 +20,8 @@ const cache = new NodeCache({ stdTTL: 3600 });
 let thumbnailIndex = {};
 
 // Ensure directories exist
-fs.ensureDirSync(THUMBNAILS_DIR);
 fs.ensureDirSync(CACHE_DIR);
+fs.ensureDirSync(THUMBNAILS_DIR);
 fs.ensureDirSync(IMAGES_DIR);
 
 // Thumbnail index management
@@ -264,9 +264,6 @@ async function getImageMetadata(imagePath) {
 
     // Update the index with new metadata (but don't save immediately)
     if (metadata) {
-      const thumbnailId = Buffer.from(relativePath).toString('base64');
-      const thumbnailPath = path.join(THUMBNAILS_DIR, thumbnailId + '.jpg');
-
       thumbnailIndex[relativePath] = {
         ...(indexEntry || {}),
         modTime: stats.mtime.getTime(),
@@ -412,8 +409,8 @@ class ThumbnailDaemon {
       console.log(`📸 Image ${action}: ${normalizedPath}`);
 
       // Generate thumbnail
-      const thumbnailId = Buffer.from(normalizedPath).toString('base64');
-      const thumbnailPath = path.join(THUMBNAILS_DIR, thumbnailId + '.jpg');
+      const { id: thumbnailId, thumbnailPath } =
+        getThumbnailInfo(normalizedPath);
 
       // Force regeneration if the image was changed, otherwise use lazy loading
       const forceRegenerate = action === 'changed';
@@ -448,8 +445,7 @@ class ThumbnailDaemon {
       console.log(`🗑️ Image deleted: ${normalizedPath}`);
 
       // Remove corresponding thumbnail
-      const thumbnailId = Buffer.from(normalizedPath).toString('base64');
-      const thumbnailPath = path.join(THUMBNAILS_DIR, thumbnailId + '.jpg');
+      const { thumbnailPath } = getThumbnailInfo(normalizedPath);
 
       if (await fs.pathExists(thumbnailPath)) {
         await fs.remove(thumbnailPath);
@@ -477,8 +473,7 @@ class ThumbnailDaemon {
     let skipped = 0;
 
     for (const img of images) {
-      const thumbnailId = Buffer.from(img.path).toString('base64');
-      const thumbnailPath = path.join(THUMBNAILS_DIR, thumbnailId + '.jpg');
+      const { thumbnailPath } = getThumbnailInfo(img);
 
       // Use lazy loading - only generate if not up to date
       const isUpToDate = await isImageUpToDate(img.fullPath, thumbnailPath);
@@ -527,6 +522,22 @@ class ThumbnailDaemon {
   }
 }
 
+// Utility function to get thumbnailId and thumbnailPath from image path
+function getThumbnailInfo(imagePath) {
+  const relativePath =
+    typeof imagePath === 'object' && imagePath.path
+      ? imagePath.path
+      : imagePath;
+  let id = Buffer.from(relativePath).toString('base64');
+
+  if (id.includes('/')) {
+    id = id.replace(/\//g, '_'); // Replace slashes to make valid filename
+  }
+
+  const thumbnailPath = path.join(THUMBNAILS_DIR, id + '.jpg');
+  return { id, thumbnailPath };
+}
+
 // Initialize thumbnail daemon
 const thumbnailDaemon = new ThumbnailDaemon();
 
@@ -568,7 +579,9 @@ app.get('/api/images', async (req, res) => {
         })
         .filter((img) => {
           if (searchObj.keyword)
-            return img.path.toLowerCase().includes(searchObj.keyword.toLowerCase());
+            return img.path
+              .toLowerCase()
+              .includes(searchObj.keyword.toLowerCase());
           return true;
         });
     }
@@ -585,8 +598,7 @@ app.get('/api/images', async (req, res) => {
     // Generate thumbnails and get metadata for requested images
     const imageData = await Promise.all(
       paginatedImages.map(async (img) => {
-        const thumbnailId = Buffer.from(img.path).toString('base64');
-        const thumbnailPath = path.join(THUMBNAILS_DIR, thumbnailId + '.jpg');
+        const { id: thumbnailId, thumbnailPath } = getThumbnailInfo(img.path);
 
         // Generate thumbnail using lazy loading (only if not up to date)
         const isUpToDate = await isImageUpToDate(img.fullPath, thumbnailPath);
@@ -598,7 +610,7 @@ app.get('/api/images', async (req, res) => {
         const metadata = await getImageMetadata(img.fullPath);
 
         return {
-          id: Buffer.from(img.path).toString('base64'),
+          id: thumbnailId,
           path: img.path,
           thumbnail: `/thumbnails/${thumbnailId}`,
           directory: img.directory,
@@ -669,19 +681,33 @@ app.get('/api/folders', async (req, res) => {
     // Process each folder to get thumbnail data
     const folderData = await Promise.all(
       folders.map(async (folder) => {
-        // Sort images within folder by filename
-        folder.images.sort((a, b) => a.path.localeCompare(b.path));
+        // Sort images within folder - prioritize "main" or "封面" files first
+        folder.images.sort((a, b) => {
+          const aName = path
+            .basename(a.path, path.extname(a.path))
+            .toLowerCase();
+          const bName = path
+            .basename(b.path, path.extname(b.path))
+            .toLowerCase();
+
+          // Check if either file is a main/cover image
+          const aIsMain = aName === 'main' || aName === '封面';
+          const bIsMain = bName === 'main' || bName === '封面';
+
+          if (aIsMain && !bIsMain) return -1;
+          if (!aIsMain && bIsMain) return 1;
+
+          // If both or neither are main images, sort alphabetically
+          return a.path.localeCompare(b.path);
+        });
 
         // Get main image (first image) and up to 5 additional images
         const mainImage = folder.images[0];
         const additionalImages = folder.images.slice(1, 6); // Up to 5 more
 
         // Generate thumbnail data for main image
-        const mainThumbnailId = Buffer.from(mainImage.path).toString('base64');
-        const mainThumbnailPath = path.join(
-          THUMBNAILS_DIR,
-          mainThumbnailId + '.jpg'
-        );
+        const { thumbnailPath: mainThumbnailPath, id: mainThumbnailId } =
+          getThumbnailInfo(mainImage.path);
 
         // Ensure main thumbnail exists
         const isUpToDate = await isImageUpToDate(
@@ -697,11 +723,7 @@ app.get('/api/folders', async (req, res) => {
         // Generate thumbnail data for additional images
         const additionalThumbnails = await Promise.all(
           additionalImages.map(async (img) => {
-            const thumbnailId = Buffer.from(img.path).toString('base64');
-            const thumbnailPath = path.join(
-              THUMBNAILS_DIR,
-              thumbnailId + '.jpg'
-            );
+            const { thumbnailPath, id: thumbnailId } = getThumbnailInfo(img.path);
 
             // Ensure thumbnail exists
             const isUpToDate = await isImageUpToDate(
@@ -839,8 +861,7 @@ app.post('/api/daemon/rebuild-index', async (req, res) => {
     let rebuilt = 0;
 
     for (const img of images) {
-      const thumbnailId = Buffer.from(img.path).toString('base64');
-      const thumbnailPath = path.join(THUMBNAILS_DIR, thumbnailId + '.jpg');
+      const { thumbnailPath } = getThumbnailInfo(img.fullPath);
 
       if (await fs.pathExists(thumbnailPath)) {
         // Get metadata for the image
