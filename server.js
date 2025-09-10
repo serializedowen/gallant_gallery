@@ -1204,6 +1204,21 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Serve React app in production
+if (process.env.NODE_ENV === 'production') {
+  // Serve static files from the React app build directory
+  app.use(express.static(path.join(__dirname, 'client/build')));
+
+  // Catch all handler: send back React's index.html file for any non-API routes
+  app.get('*', (req, res) => {
+    // Skip API routes
+    if (req.path.startsWith('/api') || req.path.startsWith('/images') || req.path.startsWith('/thumbnails')) {
+      return res.status(404).json({ error: 'API endpoint not found' });
+    }
+    res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
+  });
+}
+
 // Start server
 app.listen(PORT, async () => {
   console.log(`Gallery server running on http://localhost:${PORT}`);
