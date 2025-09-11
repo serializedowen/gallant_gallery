@@ -1,4 +1,8 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useRef } from 'react';
+import Slider from 'react-slick';
+import 'slick-carousel/slick/slick.css';
+import 'slick-carousel/slick/slick-theme.css';
+import './Lightbox.css';
 import { Image } from '../../types/api-definitions';
 import { useApp } from '../../contexts/AppContext';
 import ApiService from '../../services/api';
@@ -16,7 +20,6 @@ import {
   Close as CloseIcon,
   ArrowBackIos as ArrowBackIosIcon,
   ArrowForwardIos as ArrowForwardIosIcon,
-  Api,
 } from '@mui/icons-material';
 
 interface LightboxProps {
@@ -34,6 +37,7 @@ const Lightbox: React.FC<LightboxProps> = ({
 }) => {
   const { t } = useApp();
   const currentImage = images[currentIndex];
+  const sliderRef = useRef<Slider>(null);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -42,17 +46,44 @@ const Lightbox: React.FC<LightboxProps> = ({
           onClose();
           break;
         case 'ArrowLeft':
-          onNavigate('prev');
+          sliderRef.current?.slickPrev();
           break;
         case 'ArrowRight':
-          onNavigate('next');
+          sliderRef.current?.slickNext();
           break;
         default:
           break;
       }
     },
-    [onClose, onNavigate]
+    [onClose]
   );
+
+  const sliderSettings = {
+    // dots: true,
+    infinite: true,
+    speed: 300,
+    slidesToShow: 1,
+    slidesToScroll: 1,
+    initialSlide: currentIndex,
+    swipeToSlide: true,
+    touchThreshold: 10,
+    arrows: false,
+    customPaging: (i: number) => (
+      <Box
+        sx={{
+          width: 12,
+          height: 12,
+          borderRadius: '50%',
+          backgroundColor: 'rgba(255, 255, 255, 0.5)',
+          transition: 'all 0.3s ease',
+          '&:hover': {
+            backgroundColor: 'rgba(255, 255, 255, 0.8)',
+          },
+        }}
+      />
+    ),
+    dotsClass: 'slick-dots custom-dots',
+  };
 
   useEffect(() => {
     document.addEventListener('keydown', handleKeyDown);
@@ -120,7 +151,7 @@ const Lightbox: React.FC<LightboxProps> = ({
       <Fade in={true} timeout={600}>
         <IconButton
           aria-label='previous'
-          onClick={() => onNavigate('prev')}
+          onClick={() => sliderRef.current?.slickPrev()}
           sx={{
             position: 'absolute',
             left: 16,
@@ -143,7 +174,7 @@ const Lightbox: React.FC<LightboxProps> = ({
       <Fade in={true} timeout={600}>
         <IconButton
           aria-label='next'
-          onClick={() => onNavigate('next')}
+          onClick={() => sliderRef.current?.slickNext()}
           sx={{
             position: 'absolute',
             right: 16,
@@ -163,73 +194,117 @@ const Lightbox: React.FC<LightboxProps> = ({
         </IconButton>
       </Fade>
 
-      <DialogContent sx={{ p: 0, position: 'relative', overflow: 'hidden' }}>
+      <DialogContent sx={{ p: 0, position: 'relative' }}>
         <Box
+          className='lightbox-slider'
           sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
             height: '80vh',
+            '& .slick-slider': {
+              height: '100%',
+            },
+            '& .slick-list': {
+              height: '100%',
+            },
+            '& .slick-track': {
+              height: '100%',
+            },
+            '& .slick-slide': {
+              height: '100%',
+              '& > div': {
+                height: '100%',
+              },
+            },
           }}
         >
-          <Zoom in={true} timeout={400}>
-            <Box
-              component='img'
-              src={ApiService.getImageUrl(currentImage.path)}
-              alt={currentImage.metadata.filename}
-              sx={{
-                maxHeight: '80vh',
-                maxWidth: '80vw',
-                objectFit: 'contain',
-                transition: 'all 0.3s ease-in-out',
-              }}
-            />
-          </Zoom>
-          <Fade in={true} timeout={600}>
-            <Box
-              sx={{
-                position: 'absolute',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                p: 2,
-                background:
-                  'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%)',
-                color: 'white',
-              }}
-            >
-              <Typography variant='h6'>
-                {currentImage.metadata.filename}
-              </Typography>
-              <Grid container spacing={2}>
-                <Grid item>
-                  <Typography variant='body2'>
-                    {t('lightbox.size')}:{' '}
-                    {formatFileSize(currentImage.metadata.size)}
-                  </Typography>
-                </Grid>
-                <Grid item>
-                  <Typography variant='body2'>
-                    {t('lightbox.dimensions')}:{' '}
-                    {currentImage.metadata.width && currentImage.metadata.height
-                      ? `${currentImage.metadata.width} × ${currentImage.metadata.height}`
-                      : 'Unknown'}
-                  </Typography>
-                </Grid>
-                <Grid item>
-                  <Typography variant='body2'>
-                    {t('lightbox.format')}: {currentImage.metadata.format}
-                  </Typography>
-                </Grid>
-                <Grid item>
-                  <Typography variant='body2'>
-                    {t('lightbox.directory')}: {currentImage.directory}
-                  </Typography>
-                </Grid>
-              </Grid>
-            </Box>
-          </Fade>
+          <Slider ref={sliderRef} {...sliderSettings}>
+            {images.map((image, index) => (
+              <Box
+                key={image.id}
+                sx={{
+                  height: '80vh',
+                  display: 'flex !important',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  position: 'relative',
+                }}
+              >
+                <Box
+                  component='img'
+                  src={ApiService.getImageUrl(image.path)}
+                  alt={image.metadata.filename}
+                  sx={{
+                    maxHeight: '80vh',
+                    maxWidth: '90vw',
+                    objectFit: 'contain',
+                    userSelect: 'none',
+                  }}
+                />
+
+                {/* Image info overlay */}
+                <Fade in={true} timeout={600}>
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      p: 2,
+                      background:
+                        'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%)',
+                      color: 'white',
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        mb: 1,
+                      }}
+                    >
+                      <Typography variant='h6' noWrap>
+                        {image.metadata.filename}
+                      </Typography>
+                      <Typography
+                        variant='body2'
+                        sx={{ opacity: 0.8, minWidth: 'fit-content', ml: 2 }}
+                      >
+                        {index + 1} / {images.length}
+                      </Typography>
+                    </Box>
+
+                    <Grid container spacing={2}>
+                      <Grid item xs={6} sm={3}>
+                        <Typography variant='body2'>
+                          {t('lightbox.size')}:{' '}
+                          {formatFileSize(image.metadata.size)}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={6} sm={3}>
+                        <Typography variant='body2'>
+                          {t('lightbox.dimensions')}:{' '}
+                          {image.metadata.width && image.metadata.height
+                            ? `${image.metadata.width} × ${image.metadata.height}`
+                            : 'Unknown'}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={6} sm={3}>
+                        <Typography variant='body2'>
+                          {t('lightbox.format')}: {image.metadata.format}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={6} sm={3}>
+                        <Typography variant='body2' noWrap>
+                          {t('lightbox.directory')}: {image.directory}
+                        </Typography>
+                      </Grid>
+                    </Grid>
+                  </Box>
+                </Fade>
+              </Box>
+            ))}
+          </Slider>
         </Box>
       </DialogContent>
     </Dialog>
