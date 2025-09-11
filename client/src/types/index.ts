@@ -44,11 +44,19 @@ export interface CategoryItem {
 
 export interface DaemonStatus {
   isRunning: boolean;
+  isWatching: boolean;
   directory: string;
+  watchedDirectory: string;
   queueLength: number;
+  processingQueue: string[];
   indexEntries: number;
   metadataCache: number;
   thumbnailIndexCount: number;
+  thumbnailIndex?: {
+    totalEntries: number;
+    entriesWithMetadata: number;
+    cacheHitRate: string;
+  };
 }
 
 export type ViewType = 'categories' | 'folders' | 'grid';

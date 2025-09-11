@@ -1,7 +1,21 @@
 import React from 'react';
-import { CategoryItem } from '../../../types';
+import { CategoryItem } from '../../../types/api-definitions';
 import { useApp } from '../../../contexts/AppContext';
 import ApiService from '../../../services/api';
+import {
+  Box,
+  Typography,
+  Grid,
+  Card,
+  CardActionArea,
+  CardMedia,
+  CardContent,
+  Paper,
+} from '@mui/material';
+import FolderIcon from '@mui/icons-material/Folder';
+import ImageIcon from '@mui/icons-material/Image';
+import FolderOpenIcon from '@mui/icons-material/FolderOpen';
+import CategoryIcon from '@mui/icons-material/Category';
 
 interface CategoryContentProps {
   selectedCategory: string | null;
@@ -16,72 +30,115 @@ const CategoryContent: React.FC<CategoryContentProps> = ({
 }) => {
   const { t } = useApp();
 
+
+  console.log(items)
+
   if (!selectedCategory) {
     return (
-      <div className="category-content">
-        <div className="no-category-selected">
-          <i className="fas fa-layer-group"></i>
-          <h3>{t('category.select')}</h3>
-          <p>{t('category.select.description')}</p>
-        </div>
-      </div>
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100%',
+          color: 'text.secondary',
+          textAlign: 'center',
+        }}
+      >
+        <CategoryIcon sx={{ fontSize: 60, mb: 2 }} />
+        <Typography variant="h5" gutterBottom>
+          {t('category.select')}
+        </Typography>
+        <Typography variant="body1">{t('category.select.description')}</Typography>
+      </Box>
     );
   }
 
   return (
-    <div className="category-content">
-      <div className="category-header">
-        <h2>{selectedCategory}</h2>
-        <div className="category-stats">
-          <span>{items.length} {t('stats.items')}</span>
-          <span>
-            {items.reduce((acc, item) => acc + (item.imageCount || (item.type === 'image' ? 1 : 0)), 0)} {t('stats.images')}
-          </span>
-        </div>
-      </div>
-      
-      <div className="items-grid">
-        {items.length === 0 ? (
-          <div className="no-items">
-            <i className="fas fa-folder-open"></i>
-            <h3>{t('category.noItems')}</h3>
-          </div>
-        ) : (
-          items.map((item, index) => (
-            <div 
-              key={`${item.path}-${index}`} 
-              className="item-card"
-              onClick={() => onItemSelect(item)}
-            >
-              {item.thumbnail && (
-                <div className="item-thumbnail">
-                  <img
-                    src={ApiService.getThumbnailUrl(item.thumbnail)}
-                    alt={item.name}
-                    loading="lazy"
-                  />
-                </div>
-              )}
-              
-              <div className="item-info">
-                <h4 className="item-name">{item.name}</h4>
-                <div className="item-meta">
-                  <span className="item-type">
-                    <i className={`fas ${item.type === 'folder' ? 'fa-folder' : 'fa-image'}`}></i>
-                    {item.type === 'folder' ? 'Folder' : 'Image'}
-                  </span>
-                  {item.imageCount && (
-                    <span className="item-count">
-                      {item.imageCount} {t('stats.images')}
-                    </span>
+    <Paper elevation={2} sx={{ p: 2, height: '100%', overflowY: 'auto' }}>
+      <Box sx={{ mb: 2 }}>
+        <Typography variant="h4" component="h2" gutterBottom>
+          {selectedCategory}
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 3, color: 'text.secondary' }}>
+          <Typography variant="body2">
+            {items.length} {t('stats.items')}
+          </Typography>
+          <Typography variant="body2">
+            {items.reduce(
+              (acc, item) =>
+                acc + item.imageCount,
+              0
+            )}{' '}
+            {t('stats.images')}
+          </Typography>
+        </Box>
+      </Box>
+
+      {items.length === 0 ? (
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: 'calc(100% - 100px)', // Adjust based on header height
+            color: 'text.secondary',
+            textAlign: 'center',
+          }}
+        >
+          <FolderOpenIcon sx={{ fontSize: 60, mb: 2 }} />
+          <Typography variant="h6">{t('category.noItems')}</Typography>
+        </Box>
+      ) : (
+        <Grid container spacing={2}>
+          {items.map((item, index) => (
+            <Grid item key={`${item.path}-${index}`} xs={12} sm={6} md={4} lg={3}>
+              <Card sx={{ height: '100%' }}>
+                <CardActionArea
+                  onClick={() => onItemSelect(item)}
+                  sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+                >
+                  {item.mainImage && (
+                    <CardMedia
+                      component="img"
+                      height="140"
+                      image={ApiService.getThumbnailUrl(item.mainImage.thumbnail)}
+                      alt={item.name}
+                      sx={{ objectFit: 'cover' }}
+                    />
                   )}
-                </div>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
+                  <CardContent sx={{ flexGrow: 1 }}>
+                    <Typography gutterBottom variant="h6" component="div">
+                      {item.name}
+                    </Typography>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        color: 'text.secondary',
+                        mt: 1,
+                      }}
+                    >
+                      <FolderIcon sx={{ mr: 1 }} />
+                      <Typography variant="body2" sx={{ mr: 2 }}>
+                        Folder
+                      </Typography>
+                      {item.imageCount && (
+                        <Typography variant="body2">
+                          {item.imageCount} {t('stats.images')}
+                        </Typography>
+                      )}
+                    </Box>
+                  </CardContent>
+                </CardActionArea>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      )}
+    </Paper>
   );
 };
 

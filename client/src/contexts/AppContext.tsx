@@ -15,6 +15,10 @@ interface AppContextType {
   searchTerm: string;
   setSearchTerm: (term: string) => void;
   
+  // Path/Selection state
+  selectedPath: string | null;
+  setSelectedPath: (path: string | null) => void;
+  
   // Category state
   selectedCategory: string | null;
   setSelectedCategory: (category: string | null) => void;
@@ -48,6 +52,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
   const [currentView, setCurrentView] = useState<ViewType>('categories');
   const [currentLanguage, setCurrentLanguage] = useState<Language>(i18n.getCurrentLanguage());
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -72,14 +77,16 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     setCurrentLanguage: handleSetCurrentLanguage,
     searchTerm,
     setSearchTerm,
+    selectedPath,
+    setSelectedPath,
     selectedCategory,
     setSelectedCategory,
     selectedItem,
     setSelectedItem,
     isLoading,
     setIsLoading,
-    t: i18n.t.bind(i18n),
-    formatCount: i18n.formatCount.bind(i18n),
+    t: i18n.t,
+    formatCount: i18n.formatCount,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

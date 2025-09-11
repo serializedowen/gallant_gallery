@@ -8,6 +8,7 @@ yarn-error.log*
 thumbnails/
 cache/
 images/
+dist/
 
 # Environment variables
 .env

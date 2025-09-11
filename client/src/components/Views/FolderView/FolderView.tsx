@@ -1,10 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { Folder } from '../../../types';
+import { useNavigate } from 'react-router-dom';
+import { Folder } from '../../../types/api-definitions';
 import { useApp } from '../../../contexts/AppContext';
 import ApiService from '../../../services/api';
+import {
+  Grid,
+  Card,
+  CardActionArea,
+  CardMedia,
+  CardContent,
+  Typography,
+  Box,
+  CircularProgress,
+  Alert,
+  Button,
+} from '@mui/material';
+import FolderIcon from '@mui/icons-material/Folder';
 
 const FolderView: React.FC = () => {
-  const { isLoading, setIsLoading, t } = useApp();
+  const navigate = useNavigate();
+  const { isLoading, setIsLoading, t, setSelectedPath } = useApp();
   const [folders, setFolders] = useState<Folder[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -16,8 +31,8 @@ const FolderView: React.FC = () => {
     try {
       setIsLoading(true);
       setError(null);
-      const data = await ApiService.getFolders();
-      setFolders(data);
+      const response = await ApiService.getFolders();
+      setFolders(response.folders);
     } catch (err) {
       console.error('Error loading folders:', err);
       setError(t('error.loadFolders'));
@@ -27,71 +42,77 @@ const FolderView: React.FC = () => {
   };
 
   const handleFolderClick = (folder: Folder) => {
-    // Here you could navigate to folder detail view or trigger some action
-    console.log('Clicked folder:', folder);
+    setSelectedPath(folder.directory);
+    navigate(`/folder/${encodeURIComponent(folder.displayName)}`);
   };
+
+  if (isLoading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
+        <CircularProgress />
+        <Typography sx={{ ml: 2 }}>{t('loading.folders')}</Typography>
+      </Box>
+    );
+  }
 
   if (error) {
     return (
-      <div className="error-message">
-        <i className="fas fa-exclamation-circle"></i>
-        <h3>{error}</h3>
-        <button onClick={loadFolders} className="retry-btn">
-          {t('button.retry')}
-        </button>
-      </div>
+      <Box sx={{ p: 3, textAlign: 'center' }}>
+        <Alert severity="error" action={
+          <Button color="inherit" size="small" onClick={loadFolders}>
+            {t('button.retry')}
+          </Button>
+        }>
+          {error}
+        </Alert>
+      </Box>
+    );
+  }
+
+  if (folders.length === 0) {
+    return (
+      <Box sx={{ p: 3, textAlign: 'center', color: 'text.secondary' }}>
+        <FolderIcon sx={{ fontSize: 60, mb: 2 }} />
+        <Typography variant="h6">{t('error.noResults')}</Typography>
+        <Typography>{t('error.noResults.description')}</Typography>
+      </Box>
     );
   }
 
   return (
-    <div className="folder-grid">
-      {folders.map((folder) => (
-        <div 
-          key={folder.path} 
-          className="folder-card"
-          onClick={() => handleFolderClick(folder)}
-        >
-          <div className="folder-thumbnail">
-            {folder.thumbnail ? (
-              <img
-                src={ApiService.getThumbnailUrl(folder.thumbnail)}
-                alt={folder.name}
-                loading="lazy"
-              />
-            ) : (
-              <div className="folder-placeholder">
-                <i className="fas fa-folder"></i>
-              </div>
-            )}
-          </div>
-          
-          <div className="folder-info">
-            <h3 className="folder-name">{folder.name}</h3>
-            <div className="folder-stats">
-              <span className="image-count">
-                <i className="fas fa-image"></i>
-                {folder.imageCount} {t('stats.images')}
-              </span>
-            </div>
-          </div>
-        </div>
-      ))}
-      
-      {isLoading && (
-        <div className="loading">
-          <i className="fas fa-spinner fa-spin"></i>
-          <span>{t('loading.folders')}</span>
-        </div>
-      )}
-      
-      {!isLoading && folders.length === 0 && (
-        <div className="no-results">
-          <i className="fas fa-folder-open"></i>
-          <h3>{t('error.noResults')}</h3>
-          <p>{t('error.noResults.description')}</p>
-        </div>
-      )}
-    </div>
+    <Box sx={{ p: 3 }}>
+      <Grid container spacing={3}>
+        {folders.map((folder) => (
+          <Grid item key={folder.directory} xs={12} sm={6} md={4} lg={3}>
+            <Card>
+              <CardActionArea onClick={() => handleFolderClick(folder)}>
+                {folder.mainImage ? (
+                  <CardMedia
+                    component="img"
+                    height="160"
+                    image={ApiService.getThumbnailUrl(folder.mainImage.thumbnail)}
+                    alt={folder.displayName}
+                    sx={{ objectFit: 'cover' }}
+                  />
+                ) : (
+                  <Box sx={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'grey.200' }}>
+                    <FolderIcon sx={{ fontSize: 80, color: 'grey.500' }} />
+                  </Box>
+                )}
+                <CardContent>
+                  <Typography gutterBottom variant="h6" component="div" noWrap>
+                    {folder.displayName}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {folder.totalCount} {t('stats.images')}
+                  </Typography>
+                </CardContent>
+              </CardActionArea>
+            </Card>
+          </Grid>
+        ))}
+      </Grid>
+    </Box>
   );
 };
 

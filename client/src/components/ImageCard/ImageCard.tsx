@@ -1,6 +1,14 @@
 import React from 'react';
-import { Image } from '../../types';
+import { Image } from '../../types/api-definitions';
 import ApiService from '../../services/api';
+import {
+  Card,
+  CardActionArea,
+  CardMedia,
+  CardContent,
+  Typography,
+  Box,
+} from '@mui/material';
 
 interface ImageCardProps {
   image: Image;
@@ -16,30 +24,46 @@ const ImageCard: React.FC<ImageCardProps> = ({ image, onClick }) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
+
+
   return (
-    <div className="image-card" onClick={onClick}>
-      <div className="image-thumbnail">
-        <img
-          src={ApiService.getThumbnailUrl(image.thumbnailPath)}
-          alt={image.name}
-          loading="lazy"
+    <Card sx={{ height: '100%' }}>
+      <CardActionArea onClick={onClick}>
+        <CardMedia
+          component="img"
+          height="140"
+          image={ApiService.getThumbnailUrl(image.thumbnail)}
+          alt={image.metadata.filename}
         />
-      </div>
-      
-      <div className="image-info">
-        <h4 className="image-name" title={image.name}>
-          {image.name}
-        </h4>
-        <div className="image-meta">
-          <span className="image-size">
-            {formatFileSize(image.size)}
-          </span>
-          <span className="image-dimensions">
-            {image.dimensions.width} × {image.dimensions.height}
-          </span>
-        </div>
-      </div>
-    </div>
+        <CardContent>
+          <Typography
+            gutterBottom
+            variant="h6"
+            component="div"
+            noWrap
+            title={image.metadata.filename}
+          >
+            {image.metadata.filename}
+          </Typography>
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              color: 'text.secondary',
+            }}
+          >
+            <Typography variant="body2">
+              {formatFileSize(image.metadata.size)}
+            </Typography>
+            <Typography variant="body2">
+              {image.metadata.width && image.metadata.height 
+                ? `${image.metadata.width} × ${image.metadata.height}`
+                : 'Unknown'}
+            </Typography>
+          </Box>
+        </CardContent>
+      </CardActionArea>
+    </Card>
   );
 };
 

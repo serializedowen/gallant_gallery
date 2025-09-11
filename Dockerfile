@@ -17,12 +17,24 @@ RUN apk add --no-cache \
 
 # Copy package files
 COPY package*.json ./
+COPY server/package*.json ./server/
+COPY server/tsconfig.json ./server/
 
-# Install dependencies
-RUN npm ci --only=production
+# Install root dependencies
+RUN npm ci
+
+# Install server dependencies
+RUN cd server && npm ci
 
 # Copy application code
 COPY . .
+
+# Build the TypeScript application
+RUN npm run build
+
+# Remove dev dependencies to reduce image size
+RUN cd server && npm ci --only=production && npm cache clean --force
+RUN npm ci --only=production && npm cache clean --force
 
 # Create cache directory with proper permissions
 RUN mkdir -p /app/cache && \
@@ -46,4 +58,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD node -e "require('http').get('http://localhost:' + (process.env.PORT || 3000) + '/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"
 
 # Start the application
-CMD ["node", "server.js"]
+CMD ["node", "dist/server.js"]

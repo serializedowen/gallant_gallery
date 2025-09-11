@@ -1,26 +1,36 @@
 import React, { useState, useEffect } from 'react';
-import { Category } from '../../../types';
+import { Category } from '../../../types/api-definitions';
 import { useApp } from '../../../contexts/AppContext';
-import ApiService from '../../../services/api';
+import {
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText,
+  TextField,
+  Typography,
+  Box,
+  Paper,
+} from '@mui/material';
 
 interface CategorySidebarProps {
   categories: Category[];
   onCategorySelect: (categoryName: string) => void;
 }
 
-const CategorySidebar: React.FC<CategorySidebarProps> = ({ 
-  categories, 
-  onCategorySelect 
+const CategorySidebar: React.FC<CategorySidebarProps> = ({
+  categories,
+  onCategorySelect,
 }) => {
   const { selectedCategory, t } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
-  const [filteredCategories, setFilteredCategories] = useState<Category[]>(categories);
+  const [filteredCategories, setFilteredCategories] =
+    useState<Category[]>(categories);
 
   useEffect(() => {
     if (searchTerm.trim() === '') {
       setFilteredCategories(categories);
     } else {
-      const filtered = categories.filter(category =>
+      const filtered = categories.filter((category) =>
         category.name.toLowerCase().includes(searchTerm.toLowerCase())
       );
       setFilteredCategories(filtered);
@@ -32,41 +42,53 @@ const CategorySidebar: React.FC<CategorySidebarProps> = ({
   };
 
   return (
-    <aside className="category-sidebar">
-      <div className="sidebar-header">
-        <h3>{t('category.title')}</h3>
-        <input
-          type="text"
-          value={searchTerm}
-          onChange={handleSearchChange}
-          placeholder={t('category.search.placeholder')}
-          className="category-search"
-        />
-      </div>
-      
-      <ul className="category-list">
+    <Paper elevation={2} sx={{ p: 2, height: '100%' }}>
+      <Typography variant="h6" gutterBottom>
+        {t('category.title')}
+      </Typography>
+      <TextField
+        fullWidth
+        variant="outlined"
+        size="small"
+        placeholder={t('category.search.placeholder')}
+        value={searchTerm}
+        onChange={handleSearchChange}
+        sx={{ mb: 2 }}
+      />
+      <List>
         {filteredCategories.map((category) => (
-          <li key={category.name}>
-            <button
-              className={`category-item ${selectedCategory === category.name ? 'active' : ''}`}
+          <ListItem key={category.name} disablePadding>
+            <ListItemButton
+              selected={selectedCategory === category.name}
               onClick={() => onCategorySelect(category.name)}
             >
-              <div className="category-info">
-                <span className="category-name">{category.name}</span>
-                <div className="category-stats">
-                  <span className="item-count">
-                    {category.totalItems} {t('stats.items')}
-                  </span>
-                  <span className="image-count">
-                    {category.imageCount} {t('stats.images')}
-                  </span>
-                </div>
-              </div>
-            </button>
-          </li>
+              <ListItemText
+                primary={category.name}
+                secondary={
+                  <Box component="span" sx={{ display: 'block' }}>
+                    <Typography
+                      component="span"
+                      variant="body2"
+                      color="text.secondary"
+                    >
+                      {category.itemCount} {t('stats.items')}
+                    </Typography>
+                    <Typography
+                      component="span"
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ ml: 2 }}
+                    >
+                      {category.imageCount} {t('stats.images')}
+                    </Typography>
+                  </Box>
+                }
+              />
+            </ListItemButton>
+          </ListItem>
         ))}
-      </ul>
-    </aside>
+      </List>
+    </Paper>
   );
 };
 

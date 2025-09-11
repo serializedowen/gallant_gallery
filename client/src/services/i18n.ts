@@ -62,6 +62,7 @@ const translations: Translations = {
     'daemon.status': '状态',
     'daemon.watching': '监视目录',
     'daemon.queue': '处理队列',
+    'daemon.queue.empty': '空',
     'daemon.indexEntries': '索引条目',
     'daemon.metadataCache': '元数据缓存',
     'daemon.thumbnailIndex': '缩略图索引',
@@ -69,8 +70,8 @@ const translations: Translations = {
     'daemon.stop': '停止守护进程',
     'daemon.generateAll': '生成所有缩略图',
     'daemon.rebuildIndex': '重建索引',
-    'daemon.running': '运行中',
-    'daemon.stopped': '已停止',
+    'daemon.status.running': '运行中',
+    'daemon.status.stopped': '已停止',
   },
   en: {
     // Header
@@ -88,7 +89,8 @@ const translations: Translations = {
     'category.title': 'Categories',
     'category.search.placeholder': 'Search categories...',
     'category.select': 'Select Category',
-    'category.select.description': 'Choose a category from the sidebar to view its items',
+    'category.select.description':
+      'Choose a category from the sidebar to view its items',
     'category.noItems': 'No items found in this category',
 
     // Stats
@@ -127,6 +129,7 @@ const translations: Translations = {
     'daemon.status': 'Status',
     'daemon.watching': 'Watching Directory',
     'daemon.queue': 'Processing Queue',
+    'daemon.queue.empty': 'Empty',
     'daemon.indexEntries': 'Index Entries',
     'daemon.metadataCache': 'Metadata Cache',
     'daemon.thumbnailIndex': 'Thumbnail Index',
@@ -134,8 +137,8 @@ const translations: Translations = {
     'daemon.stop': 'Stop Daemon',
     'daemon.generateAll': 'Generate All Thumbnails',
     'daemon.rebuildIndex': 'Rebuild Index',
-    'daemon.running': 'Running',
-    'daemon.stopped': 'Stopped',
+    'daemon.status.running': 'Running',
+    'daemon.status.stopped': 'Stopped',
   },
 };
 
@@ -145,10 +148,16 @@ class I18nService {
 
   constructor() {
     // Load language from localStorage or default to 'zh'
-    const savedLang = localStorage.getItem('gallant-gallery-language') as Language;
+    const savedLang = localStorage.getItem(
+      'gallant-gallery-language'
+    ) as Language;
     if (savedLang && ['zh', 'en'].includes(savedLang)) {
       this.currentLanguage = savedLang;
     }
+
+
+    this.t = this.t.bind(this);
+    this.formatCount = this.formatCount.bind(this);
   }
 
   getCurrentLanguage(): Language {
@@ -164,36 +173,64 @@ class I18nService {
     }
   }
 
-  t(key: string): string {
-    const keys = key.split('.');
-    let value: any = translations[this.currentLanguage];
-    
-    for (const k of keys) {
-      if (value && typeof value === 'object' && k in value) {
-        value = value[k];
-      } else {
-        // Fallback to English if key not found in current language
-        value = translations['en'];
-        for (const fallbackKey of keys) {
-          if (value && typeof value === 'object' && fallbackKey in value) {
-            value = value[fallbackKey];
-          } else {
-            return key; // Return key if not found in either language
-          }
-        }
-        break;
-      }
-    }
-    
-    return typeof value === 'string' ? value : key;
+  t(key: string, params = {}): string {
+    const translation =
+      translations[this.currentLanguage][key] || translations['en'][key] || key;
+
+    // Simple parameter replacement
+    return Object.keys(params).reduce((text, param) => {
+      return text.replace(`{{${param}}}`, params[param]);
+    }, translation);
   }
 
   // Format count with appropriate unit
-  formatCount(count: number, type: 'categories' | 'items' | 'images' | 'folders'): string {
-    const singleKey = `stats.${type.slice(0, -1)}`; // Remove 's' for singular
-    const pluralKey = `stats.${type}`;
-    const unit = count === 1 ? this.t(singleKey) : this.t(pluralKey);
-    return `${count}${unit}`;
+  formatCount(
+    count: number,
+    type: 'categories' | 'items' | 'images' | 'folders'
+  ): string {
+    const isZhCN = this.currentLanguage === 'zh';
+
+    if (isZhCN) {
+      // Chinese formatting: number + unit
+      switch (type) {
+        case 'categories':
+          return `${count}${this.t(
+            count === 1 ? 'stats.category' : 'stats.categories'
+          )}`;
+        case 'items':
+          return `${count}${this.t(
+            count === 1 ? 'stats.item' : 'stats.items'
+          )}`;
+        case 'folders':
+          return `${count}${this.t(
+            count === 1 ? 'stats.folder' : 'stats.folders'
+          )}`;
+        default:
+          return `${count}${this.t(
+            count === 1 ? 'stats.image' : 'stats.images'
+          )}`;
+      }
+    } else {
+      // English formatting: count + unit
+      switch (type) {
+        case 'categories':
+          return `${count}${this.t(
+            count === 1 ? 'stats.category' : 'stats.categories'
+          )}`;
+        case 'items':
+          return `${count}${this.t(
+            count === 1 ? 'stats.item' : 'stats.items'
+          )}`;
+        case 'folders':
+          return `${count}${this.t(
+            count === 1 ? 'stats.folder' : 'stats.folders'
+          )}`;
+        default:
+          return `${count}${this.t(
+            count === 1 ? 'stats.image' : 'stats.images'
+          )}`;
+      }
+    }
   }
 
   subscribe(listener: (lang: Language) => void): () => void {
@@ -207,7 +244,7 @@ class I18nService {
   }
 
   private notifyListeners(): void {
-    this.listeners.forEach(listener => listener(this.currentLanguage));
+    this.listeners.forEach((listener) => listener(this.currentLanguage));
   }
 }
 
