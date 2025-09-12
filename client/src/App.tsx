@@ -1,18 +1,12 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider } from './contexts/AppContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import Header from './components/Header/Header';
 import Navigation from './components/Navigation/Navigation';
 import CategoryView from './components/Views/CategoryView/CategoryView';
 import GridView from './components/Views/GridView/GridView';
 import { CssBaseline, Container, Box } from '@mui/material';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
-
-const darkTheme = createTheme({
-  palette: {
-    mode: 'dark',
-  },
-});
 
 const AppContent = () => {
   return (
@@ -35,7 +29,7 @@ const AppContent = () => {
 
 function App() {
   return (
-    <ThemeProvider theme={darkTheme}>
+    <ThemeProvider>
       <AppProvider>
         <Router>
           <AppContent />

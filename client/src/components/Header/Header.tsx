@@ -3,6 +3,7 @@ import { useApp } from '../../contexts/AppContext';
 import ApiService from '../../services/api';
 import { DaemonStatus } from '../../types/api-definitions';
 import DaemonModal from '../DaemonModal/DaemonModal';
+import ThemeSwitch from '../ThemeSwitch';
 import {
   AppBar,
   Toolbar,
@@ -162,6 +163,7 @@ const Header: React.FC = () => {
           />
         </Search>
         <Box sx={{ display: { xs: 'none', md: 'flex' } }}>
+          <ThemeSwitch />
           <IconButton
             size="large"
             aria-label="show language menu"
@@ -218,6 +220,11 @@ const Header: React.FC = () => {
           >
             <AdbIcon />
           </IconButton>
+        </Box>
+
+        {/* Mobile controls */}
+        <Box sx={{ display: { xs: 'flex', md: 'none' } }}>
+          <ThemeSwitch />
         </Box>
 
         <DaemonModal
