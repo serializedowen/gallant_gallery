@@ -4,7 +4,6 @@ import { AppProvider } from './contexts/AppContext';
 import Header from './components/Header/Header';
 import Navigation from './components/Navigation/Navigation';
 import CategoryView from './components/Views/CategoryView/CategoryView';
-import FolderView from './components/Views/FolderView/FolderView';
 import GridView from './components/Views/GridView/GridView';
 import { CssBaseline, Container, Box } from '@mui/material';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
@@ -25,7 +24,6 @@ const AppContent = () => {
           <Route path="/" element={<Navigate to="/categories" replace />} />
           <Route path="/categories" element={<CategoryView />} />
           <Route path="/category/:categoryName" element={<CategoryView />} />
-          <Route path="/folders" element={<FolderView />} />
           <Route path="/folder/:folderName" element={<GridView />} />
           <Route path="/grid" element={<GridView />} />
         </Routes>

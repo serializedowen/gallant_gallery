@@ -4,7 +4,6 @@ import { useApp } from '../../contexts/AppContext';
 import { BottomNavigation, BottomNavigationAction, Paper } from '@mui/material';
 import {
   Category as CategoryIcon,
-  Folder as FolderIcon,
   Apps as AppsIcon,
 } from '@mui/icons-material';
 
@@ -17,9 +16,7 @@ const Navigation: React.FC = () => {
   const getCurrentValue = () => {
     if (location.pathname.startsWith('/category') || location.pathname === '/categories') {
       return 'categories';
-    } else if (location.pathname.startsWith('/folder') || location.pathname === '/folders') {
-      return 'folders';
-    } else if (location.pathname === '/grid') {
+    } else if (location.pathname.startsWith('/folder') || location.pathname === '/grid') {
       return 'grid';
     }
     return 'categories';
@@ -29,9 +26,6 @@ const Navigation: React.FC = () => {
     switch (newValue) {
       case 'categories':
         navigate('/categories');
-        break;
-      case 'folders':
-        navigate('/folders');
         break;
       case 'grid':
         navigate('/grid');
@@ -53,11 +47,6 @@ const Navigation: React.FC = () => {
           label={t('nav.categories')}
           value="categories"
           icon={<CategoryIcon />}
-        />
-        <BottomNavigationAction
-          label={t('nav.folders')}
-          value="folders"
-          icon={<FolderIcon />}
         />
         <BottomNavigationAction
           label={t('nav.allImages')}

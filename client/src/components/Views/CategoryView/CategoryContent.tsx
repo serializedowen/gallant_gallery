@@ -11,8 +11,6 @@ import {
   CardContent,
   Paper,
 } from '@mui/material';
-import FolderIcon from '@mui/icons-material/Folder';
-import ImageIcon from '@mui/icons-material/Image';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import CategoryIcon from '@mui/icons-material/Category';
 

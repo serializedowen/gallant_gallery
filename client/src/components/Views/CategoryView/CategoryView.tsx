@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Category, CategoryItem } from '../../../types/api-definitions';
+import { Category, CategoryItem, Image } from '../../../types/api-definitions';
 import { useApp } from '../../../contexts/AppContext';
 import ApiService from '../../../services/api';
 import CategorySidebar from './CategorySidebar';
 import CategoryContent from './CategoryContent';
+import FolderContent from './FolderContent';
+import Lightbox from '../../Lightbox/Lightbox';
 import { Grid, CircularProgress, Box, Alert, Button } from '@mui/material';
 
 const CategoryView: React.FC = () => {
@@ -21,6 +23,13 @@ const CategoryView: React.FC = () => {
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoryItems, setCategoryItems] = useState<CategoryItem[]>([]);
+  const [selectedFolder, setSelectedFolder] = useState<{
+    name: string;
+    directory: string;
+    categoryName?: string;
+  } | null>(null);
+  const [lightboxImages, setLightboxImages] = useState<Image[]>([]);
+  const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -78,14 +87,41 @@ const CategoryView: React.FC = () => {
   const handleCategorySelect = (categoryName: string) => {
     setSelectedCategory(categoryName);
     setSelectedItem(null);
+    setSelectedFolder(null); // Clear selected folder when changing category
     navigate(`/category/${encodeURIComponent(categoryName)}`);
   };
 
   const handleItemSelect = (item: CategoryItem) => {
     setSelectedItem(item.name);
-    // Navigate to folder view since category items are typically folders
-    navigate(`/folder/${encodeURIComponent(item.name)}`);
+    setSelectedFolder({
+      name: item.name,
+      directory: item.path,
+      categoryName: selectedCategory || undefined,
+    });
+    // Don't navigate - keep folder content in the right panel
     console.log('Selected item:', item);
+  };
+
+  const handleImageClick = (index: number, images: Image[]) => {
+    setLightboxImages(images);
+    setSelectedImageIndex(index);
+  };
+
+  const closeLightbox = () => {
+    setSelectedImageIndex(null);
+    setLightboxImages([]);
+  };
+
+  const navigateLightbox = (direction: 'prev' | 'next') => {
+    if (selectedImageIndex === null) return;
+
+    let newIndex = selectedImageIndex;
+    if (direction === 'prev') {
+      newIndex = selectedImageIndex > 0 ? selectedImageIndex - 1 : lightboxImages.length - 1;
+    } else {
+      newIndex = selectedImageIndex < lightboxImages.length - 1 ? selectedImageIndex + 1 : 0;
+    }
+    setSelectedImageIndex(newIndex);
   };
 
   if (error) {
@@ -108,11 +144,18 @@ const CategoryView: React.FC = () => {
         />
       </Grid>
       <Grid item xs={12} md={9}>
-        <CategoryContent
-          selectedCategory={selectedCategory}
-          items={categoryItems}
-          onItemSelect={handleItemSelect}
-        />
+        {selectedFolder ? (
+          <FolderContent
+            selectedFolder={selectedFolder}
+            onImageClick={handleImageClick}
+          />
+        ) : (
+          <CategoryContent
+            selectedCategory={selectedCategory}
+            items={categoryItems}
+            onItemSelect={handleItemSelect}
+          />
+        )}
       </Grid>
       {isLoading && (
         <Box
@@ -125,6 +168,14 @@ const CategoryView: React.FC = () => {
         >
           <CircularProgress />
         </Box>
+      )}
+      {selectedImageIndex !== null && (
+        <Lightbox
+          images={lightboxImages}
+          currentIndex={selectedImageIndex}
+          onClose={closeLightbox}
+          onNavigate={navigateLightbox}
+        />
       )}
     </Grid>
   );

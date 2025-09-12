@@ -23,6 +23,14 @@ class I18n {
         'category.select.description': '从侧边栏选择一个分类来查看其项目',
         'category.noItems': '此分类中没有找到项目',
 
+        // Folder view
+        'folder.select': '选择文件夹',
+        'folder.select.description': '点击一个文件夹来查看其图片',
+        'folder.noImages': '此文件夹中没有图片',
+        'folder.info': '文件夹信息',
+        'folder.name': '文件夹名称',
+        'folder.category': '所属分类',
+
         // Stats
         'stats.categories': '个分类',
         'stats.category': '个分类',
@@ -32,14 +40,17 @@ class I18n {
         'stats.image': '张图片',
         'stats.folders': '个文件夹',
         'stats.folder': '个文件夹',
+        'stats.totalImages': '图片总数',
 
         // Loading and errors
         'loading.images': '加载图片中...',
         'loading.categories': '加载分类中...',
         'loading.items': '加载项目中...',
+        'loading.folders': '加载文件夹中...',
         'error.loadImages': '加载图片失败',
         'error.loadCategories': '加载分类失败',
         'error.loadItems': '加载项目失败',
+        'error.loadFolders': '加载文件夹失败',
         'error.noResults': '未找到图片',
         'error.noResults.description': '请尝试调整搜索条件',
 
@@ -76,6 +87,7 @@ class I18n {
         'button.close': '关闭',
         'button.previous': '上一张',
         'button.next': '下一张',
+        'button.retry': '重试',
       },
 
       en: {
@@ -97,6 +109,14 @@ class I18n {
         'category.select.description': 'Choose a category from the sidebar to view its items',
         'category.noItems': 'No items found in this category',
 
+        // Folder view
+        'folder.select': 'Select a folder',
+        'folder.select.description': 'Click on a folder to view its images',
+        'folder.noImages': 'No images in this folder',
+        'folder.info': 'Folder Information',
+        'folder.name': 'Folder Name',
+        'folder.category': 'Category',
+
         // Stats
         'stats.categories': ' categories',
         'stats.category': ' category',
@@ -106,14 +126,17 @@ class I18n {
         'stats.image': ' image',
         'stats.folders': ' folders',
         'stats.folder': ' folder',
+        'stats.totalImages': 'Total Images',
 
         // Loading and errors
         'loading.images': 'Loading images...',
         'loading.categories': 'Loading categories...',
         'loading.items': 'Loading items...',
+        'loading.folders': 'Loading folders...',
         'error.loadImages': 'Failed to load images',
         'error.loadCategories': 'Failed to load categories',
         'error.loadItems': 'Failed to load items',
+        'error.loadFolders': 'Failed to load folders',
         'error.noResults': 'No images found',
         'error.noResults.description': 'Try adjusting your search terms',
 
@@ -150,6 +173,7 @@ class I18n {
         'button.close': 'Close',
         'button.previous': 'Previous',
         'button.next': 'Next',
+        'button.retry': 'Retry',
       }
     };
 
