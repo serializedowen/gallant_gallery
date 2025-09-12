@@ -3,11 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { Folder } from '../../../types/api-definitions';
 import { useApp } from '../../../contexts/AppContext';
 import ApiService from '../../../services/api';
+import { ImageSlideshow } from '../../common';
 import {
   Grid,
   Card,
   CardActionArea,
-  CardMedia,
   CardContent,
   Typography,
   Box,
@@ -86,19 +86,12 @@ const FolderView: React.FC = () => {
           <Grid item key={folder.directory} xs={12} sm={6} md={4} lg={3}>
             <Card>
               <CardActionArea onClick={() => handleFolderClick(folder)}>
-                {folder.mainImage ? (
-                  <CardMedia
-                    component="img"
-                    height="160"
-                    image={ApiService.getThumbnailUrl(folder.mainImage.thumbnail)}
-                    alt={folder.displayName}
-                    sx={{ objectFit: 'cover' }}
-                  />
-                ) : (
-                  <Box sx={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'grey.200' }}>
-                    <FolderIcon sx={{ fontSize: 80, color: 'grey.500' }} />
-                  </Box>
-                )}
+                <ImageSlideshow
+                  mainImage={folder.mainImage}
+                  additionalImages={folder.additionalImages}
+                  alt={folder.displayName}
+                  height={160}
+                />
                 <CardContent>
                   <Typography gutterBottom variant="h6" component="div" noWrap>
                     {folder.displayName}
