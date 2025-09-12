@@ -6,12 +6,24 @@
 import type { Request, Response } from 'express';
 
 // Express type aliases for better compatibility
-export type ApiRequest<P = any, ResBody = any, ReqBody = any, Query = any> = Request<P, ResBody, ReqBody, Query>;
+export type ApiRequest<
+  P = any,
+  ResBody = any,
+  ReqBody = any,
+  Query = any
+> = Request<P, ResBody, ReqBody, Query>;
 export type ExpressResponse<T = any> = Response<T>;
 
 // ============================================
 // Type Definitions
 // ============================================
+
+export interface ImageThumbnail {
+  id: string;
+  path: string;
+  thumbnail: string;
+  metadata?: ImageMetadata;
+}
 
 export interface ImageMetadata {
   filename: string;
@@ -42,12 +54,8 @@ export interface CategoryItem {
   path: string;
   category: string;
   imageCount: number;
-  mainImage: {
-    id: string;
-    path: string;
-    thumbnail: string;
-    metadata: ImageMetadata;
-  };
+  mainImage: ImageThumbnail;
+  additionalImages: Array<ImageThumbnail>;
 }
 
 export interface ItemImage {
@@ -62,18 +70,8 @@ export interface Folder {
   directory: string;
   displayName: string;
   totalCount: number;
-  mainImage: {
-    id: string;
-    path: string;
-    thumbnail: string;
-    metadata: ImageMetadata;
-  };
-  additionalImages: Array<{
-    id: string;
-    path: string;
-    thumbnail: string;
-    filename: string;
-  }>;
+  mainImage: ImageThumbnail;
+  additionalImages: Array<ImageThumbnail>;
   hasMore: boolean;
 }
 
@@ -338,7 +336,9 @@ export type ApiHandler<T extends keyof ApiEndpoints> = (
 // Route Definitions with Handlers
 // ============================================
 
-export interface RouteDefinition<T extends keyof ApiEndpoints = keyof ApiEndpoints> {
+export interface RouteDefinition<
+  T extends keyof ApiEndpoints = keyof ApiEndpoints
+> {
   method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
   path: string;
   handler: ApiHandler<T>;
@@ -352,14 +352,14 @@ export const API_ROUTES: Record<string, RouteDefinition> = {
     method: 'GET',
     path: '/api/categories',
     handler: null as any, // Will be implemented in separate handler files
-    description: 'Get all categories with item and image counts'
+    description: 'Get all categories with item and image counts',
   },
 
   getCategoryItems: {
     method: 'GET',
     path: '/api/categories/:categoryPath/items',
     handler: null as any,
-    description: 'Get items for a specific category with pagination and search'
+    description: 'Get items for a specific category with pagination and search',
   },
 
   // Item routes
@@ -367,7 +367,7 @@ export const API_ROUTES: Record<string, RouteDefinition> = {
     method: 'GET',
     path: '/api/items/:categoryPath/:itemName/images',
     handler: null as any,
-    description: 'Get images for a specific item with pagination'
+    description: 'Get images for a specific item with pagination',
   },
 
   // Image routes
@@ -375,14 +375,14 @@ export const API_ROUTES: Record<string, RouteDefinition> = {
     method: 'GET',
     path: '/api/images',
     handler: null as any,
-    description: 'Get images with pagination and search (legacy support)'
+    description: 'Get images with pagination and search (legacy support)',
   },
 
   getImage: {
     method: 'GET',
     path: '/api/image/:id',
     handler: null as any,
-    description: 'Get single image metadata by base64 encoded path'
+    description: 'Get single image metadata by base64 encoded path',
   },
 
   // Folder routes
@@ -390,7 +390,7 @@ export const API_ROUTES: Record<string, RouteDefinition> = {
     method: 'GET',
     path: '/api/folders',
     handler: null as any,
-    description: 'Get images aggregated by folders'
+    description: 'Get images aggregated by folders',
   },
 
   // Cache routes
@@ -398,7 +398,7 @@ export const API_ROUTES: Record<string, RouteDefinition> = {
     method: 'POST',
     path: '/api/refresh',
     handler: null as any,
-    description: 'Refresh the image cache'
+    description: 'Refresh the image cache',
   },
 
   // Daemon routes
@@ -406,42 +406,42 @@ export const API_ROUTES: Record<string, RouteDefinition> = {
     method: 'GET',
     path: '/api/daemon/status',
     handler: null as any,
-    description: 'Get thumbnail daemon status'
+    description: 'Get thumbnail daemon status',
   },
 
   startDaemon: {
     method: 'POST',
     path: '/api/daemon/start',
     handler: null as any,
-    description: 'Start the thumbnail daemon'
+    description: 'Start the thumbnail daemon',
   },
 
   stopDaemon: {
     method: 'POST',
     path: '/api/daemon/stop',
     handler: null as any,
-    description: 'Stop the thumbnail daemon'
+    description: 'Stop the thumbnail daemon',
   },
 
   generateAllThumbnails: {
     method: 'POST',
     path: '/api/daemon/generate-all',
     handler: null as any,
-    description: 'Generate thumbnails for all images'
+    description: 'Generate thumbnails for all images',
   },
 
   rebuildIndex: {
     method: 'POST',
     path: '/api/daemon/rebuild-index',
     handler: null as any,
-    description: 'Rebuild the thumbnail index'
+    description: 'Rebuild the thumbnail index',
   },
 
   getIndexStats: {
     method: 'GET',
     path: '/api/daemon/index-stats',
     handler: null as any,
-    description: 'Get thumbnail index statistics'
+    description: 'Get thumbnail index statistics',
   },
 
   // Static routes
@@ -449,15 +449,15 @@ export const API_ROUTES: Record<string, RouteDefinition> = {
     method: 'GET',
     path: '/',
     handler: null as any,
-    description: 'Serve the main gallery page'
+    description: 'Serve the main gallery page',
   },
 
   healthCheck: {
     method: 'GET',
     path: '/health',
     handler: null as any,
-    description: 'Health check endpoint for Docker and monitoring'
-  }
+    description: 'Health check endpoint for Docker and monitoring',
+  },
 };
 
 // ============================================

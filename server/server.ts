@@ -39,6 +39,7 @@ import {
   ImageIdParams,
   PaginationQuery,
   SearchQuery,
+  ImageThumbnail,
 } from './api-definitions';
 
 // ============================================
@@ -90,10 +91,14 @@ interface ThumbnailInfo {
 
 const app = express();
 const PORT: number = parseInt(process.env.PORT || '12512', 10);
-const IMAGES_DIR: string = process.env.IMAGES_DIR || path.join(__dirname, '../images');
+const IMAGES_DIR: string =
+  process.env.IMAGES_DIR || path.join(__dirname, '../images');
 const CACHE_DIR: string = path.join(__dirname, '../cache');
 const THUMBNAILS_DIR: string = path.join(CACHE_DIR, 'thumbnails');
-const THUMBNAIL_INDEX_FILE: string = path.join(CACHE_DIR, 'thumbnail-index.json');
+const THUMBNAIL_INDEX_FILE: string = path.join(
+  CACHE_DIR,
+  'thumbnail-index.json'
+);
 
 // Cache for 1 hour
 const cache = new NodeCache({ stdTTL: 3600 });
@@ -138,7 +143,10 @@ async function saveThumbnailIndex(): Promise<void> {
   }
 }
 
-async function isImageUpToDate(imagePath: string, thumbnailPath: string): Promise<boolean> {
+async function isImageUpToDate(
+  imagePath: string,
+  thumbnailPath: string
+): Promise<boolean> {
   try {
     // Check if thumbnail file exists
     if (!(await fs.pathExists(thumbnailPath))) {
@@ -179,8 +187,8 @@ async function isImageUpToDate(imagePath: string, thumbnailPath: string): Promis
 }
 
 async function updateThumbnailIndex(
-  imagePath: string, 
-  thumbnailPath: string, 
+  imagePath: string,
+  thumbnailPath: string,
   metadata: ImageMetadata | null = null
 ): Promise<void> {
   try {
@@ -231,20 +239,23 @@ app.use(cors());
 app.use(express.static(path.join(__dirname, '../public')));
 
 // Thumbnail serving middleware
-app.use('/thumbnails/:id', async (req: Request<{ id: string }>, res: Response, next: NextFunction) => {
-  const id = req.params.id;
-  const exts = ['.webp', '.jpg', '.png'];
-  
-  for (const ext of exts) {
-    const filePath = path.join(THUMBNAILS_DIR, id + ext);
-    if (await fs.pathExists(filePath)) {
-      res.type(ext);
-      return res.sendFile(path.resolve(filePath));
+app.use(
+  '/thumbnails/:id',
+  async (req: Request<{ id: string }>, res: Response, next: NextFunction) => {
+    const id = req.params.id;
+    const exts = ['.webp', '.jpg', '.png'];
+
+    for (const ext of exts) {
+      const filePath = path.join(THUMBNAILS_DIR, id + ext);
+      if (await fs.pathExists(filePath)) {
+        res.type(ext);
+        return res.sendFile(path.resolve(filePath));
+      }
     }
+
+    res.status(404).send('Thumbnail not found');
   }
-  
-  res.status(404).send('Thumbnail not found');
-});
+);
 
 app.use('/images', express.static(IMAGES_DIR));
 
@@ -271,10 +282,11 @@ function isImageFile(filename: string): boolean {
 
 // Utility function to get thumbnailId and thumbnailPath from image path
 function getThumbnailInfo(imagePath: string | ImageFile): ThumbnailInfo {
-  const relativePath = typeof imagePath === 'object' && 'path' in imagePath
-    ? imagePath.path
-    : imagePath as string;
-    
+  const relativePath =
+    typeof imagePath === 'object' && 'path' in imagePath
+      ? imagePath.path
+      : (imagePath as string);
+
   let id = Buffer.from(relativePath).toString('base64');
 
   if (id.includes('/')) {
@@ -283,6 +295,37 @@ function getThumbnailInfo(imagePath: string | ImageFile): ThumbnailInfo {
 
   const thumbnailPath = path.join(THUMBNAILS_DIR, id + '.jpg');
   return { id, thumbnailPath };
+}
+
+async function getImageThumbnails(
+  imageFiles: ImageFile[] | ImageFile,
+  getMetaData: boolean = false
+): Promise<ImageThumbnail[]> {
+  const files = Array.isArray(imageFiles) ? imageFiles : [imageFiles];
+
+  return await Promise.all(
+    files.map(async (file) => {
+      const { id, thumbnailPath } = getThumbnailInfo(file);
+      // Ensure main thumbnail exists
+      const isUpToDate = await isImageUpToDate(file.fullPath, thumbnailPath);
+
+      if (!isUpToDate) {
+        await generateThumbnail(file.fullPath, thumbnailPath);
+      }
+
+      let metadata: ImageMetadata | null = null;
+      if (getMetaData) {
+        metadata = await getImageMetadata(file.fullPath);
+      }
+
+      return {
+        id,
+        path: file.path,
+        thumbnail: `/thumbnails/${id}`,
+        metadata: metadata || undefined,
+      };
+    })
+  );
 }
 
 // ============================================
@@ -312,7 +355,7 @@ async function generateThumbnail(
     await sharp(imagePath)
       .resize(size, size, {
         fit: 'cover',
-        position: 'center'
+        position: 'center',
       })
       .jpeg({ quality: 80 })
       .toFile(thumbnailPath);
@@ -334,7 +377,9 @@ async function generateThumbnail(
 }
 
 // Internal function to read metadata from file (always reads from disk)
-async function getImageMetadataInternal(imagePath: string): Promise<ImageMetadata | null> {
+async function getImageMetadataInternal(
+  imagePath: string
+): Promise<ImageMetadata | null> {
   try {
     const stats = await fs.stat(imagePath);
 
@@ -342,12 +387,13 @@ async function getImageMetadataInternal(imagePath: string): Promise<ImageMetadat
     let width: number | null = null;
     let height: number | null = null;
     let format: string;
-    
+
     try {
       const metadata = await sharp(imagePath).metadata();
       width = metadata.width || null;
       height = metadata.height || null;
-      format = metadata.format || path.extname(imagePath).slice(1).toLowerCase();
+      format =
+        metadata.format || path.extname(imagePath).slice(1).toLowerCase();
     } catch (e) {
       // Fallback if Sharp can't read the image
       format = path.extname(imagePath).slice(1).toLowerCase();
@@ -368,7 +414,9 @@ async function getImageMetadataInternal(imagePath: string): Promise<ImageMetadat
 }
 
 // Get image metadata with caching
-async function getImageMetadata(imagePath: string): Promise<ImageMetadata | null> {
+async function getImageMetadata(
+  imagePath: string
+): Promise<ImageMetadata | null> {
   try {
     const stats = await fs.stat(imagePath);
     const relativePath = path
@@ -415,7 +463,10 @@ async function getImageMetadata(imagePath: string): Promise<ImageMetadata | null
 // ============================================
 
 // Recursively scan directory for images with category structure
-async function scanImagesDirectory(dirPath: string, relativePath: string = ''): Promise<ImageFile[]> {
+async function scanImagesDirectory(
+  dirPath: string,
+  relativePath: string = ''
+): Promise<ImageFile[]> {
   const images: ImageFile[] = [];
 
   try {
@@ -486,7 +537,10 @@ async function scanCategoryItems(categoryPath: string): Promise<ItemData[]> {
       if (stats.isDirectory()) {
         // Scan for images in this item folder
         const itemRelativePath = path.join(categoryPath, itemName);
-        const images = await scanImagesDirectory(itemFullPath, itemRelativePath);
+        const images = await scanImagesDirectory(
+          itemFullPath,
+          itemRelativePath
+        );
 
         if (images.length > 0) {
           items.push({
@@ -625,7 +679,10 @@ class ThumbnailDaemon {
     return supportedFormats.includes(ext);
   }
 
-  private async processNewImage(filePath: string, action: 'added' | 'changed'): Promise<void> {
+  private async processNewImage(
+    filePath: string,
+    action: 'added' | 'changed'
+  ): Promise<void> {
     const relativePath = path.relative(IMAGES_DIR, filePath);
     const normalizedPath = relativePath.replace(/\\/g, '/');
 
@@ -640,7 +697,8 @@ class ThumbnailDaemon {
       console.log(`📸 Image ${action}: ${normalizedPath}`);
 
       // Generate thumbnail
-      const { id: thumbnailId, thumbnailPath } = getThumbnailInfo(normalizedPath);
+      const { id: thumbnailId, thumbnailPath } =
+        getThumbnailInfo(normalizedPath);
 
       // Force regeneration if the image was changed, otherwise use lazy loading
       const forceRegenerate = action === 'changed';
@@ -772,617 +830,632 @@ const thumbnailDaemon = new ThumbnailDaemon();
 // ============================================
 
 // Get all categories
-app.get('/api/categories', async (req: Request, res: Response<CategoriesResponse | ErrorResponse>) => {
-  try {
-    const categories = await getAllCategories();
-    
-    // Get item count for each category
-    const categoriesWithCounts = await Promise.all(
-      categories.map(async (category) => {
-        const items = await getCategoryItems(category.path);
-        const totalImages = items.reduce((sum, item) => sum + item.imageCount, 0);
-        
-        return {
-          name: category.name,
-          path: category.path,
-          itemCount: items.length,
-          imageCount: totalImages,
-        };
-      })
-    );
+app.get(
+  '/api/categories',
+  async (req: Request, res: Response<CategoriesResponse | ErrorResponse>) => {
+    try {
+      const categories = await getAllCategories();
 
-    const response: CategoriesResponse = {
-      categories: categoriesWithCounts,
-      totalCategories: categoriesWithCounts.length,
-    };
+      // Get item count for each category
+      const categoriesWithCounts = await Promise.all(
+        categories.map(async (category) => {
+          const items = await getCategoryItems(category.path);
+          const totalImages = items.reduce(
+            (sum, item) => sum + item.imageCount,
+            0
+          );
 
-    res.json(response);
-  } catch (error) {
-    console.error('Error fetching categories:', error);
-    const errorResponse: ErrorResponse = { error: 'Internal server error' };
-    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse);
+          return {
+            name: category.name,
+            path: category.path,
+            itemCount: items.length,
+            imageCount: totalImages,
+          };
+        })
+      );
+
+      const response: CategoriesResponse = {
+        categories: categoriesWithCounts,
+        totalCategories: categoriesWithCounts.length,
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+      const errorResponse: ErrorResponse = { error: 'Internal server error' };
+      res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse);
+    }
   }
-});
+);
 
 // Get items for a specific category
-app.get('/api/categories/:categoryPath/items', async (
-  req: Request<CategoryPathParams, CategoryItemsResponse | ErrorResponse, {}, SearchQuery>, 
-  res: Response<CategoryItemsResponse | ErrorResponse>
-) => {
-  try {
-    const categoryPath = decodeURIComponent(req.params.categoryPath);
-    const page = parseInt(req.query.page || '1', 10);
-    const limit = parseInt(req.query.limit || '20', 10);
-    const search = req.query.search || '';
+app.get(
+  '/api/categories/:categoryPath/items',
+  async (
+    req: Request<
+      CategoryPathParams,
+      CategoryItemsResponse | ErrorResponse,
+      {},
+      SearchQuery
+    >,
+    res: Response<CategoryItemsResponse | ErrorResponse>
+  ) => {
+    try {
+      const categoryPath = decodeURIComponent(req.params.categoryPath);
+      const page = parseInt(req.query.page || '1', 10);
+      const limit = parseInt(req.query.limit || '20', 10);
+      const search = req.query.search || '';
 
-    const items = await getCategoryItems(categoryPath);
+      const items = await getCategoryItems(categoryPath);
 
-    // Filter by search term if provided
-    let filteredItems = items;
-    if (search) {
-      filteredItems = items.filter(item =>
-        item.name.toLowerCase().includes(search.toLowerCase())
+      // Filter by search term if provided
+      let filteredItems = items;
+      if (search) {
+        filteredItems = items.filter((item) =>
+          item.name.toLowerCase().includes(search.toLowerCase())
+        );
+      }
+
+      // Pagination
+      const startIndex = (page - 1) * limit;
+      const endIndex = startIndex + limit;
+      const paginatedItems = filteredItems.slice(startIndex, endIndex);
+
+      // Generate thumbnails and metadata for items
+      const itemsWithThumbnails = await Promise.all(
+        paginatedItems.map(async (item) => {
+          // Get the first image as the main thumbnail
+          const mainImage = item.images[0];
+          const additionalImages = item.images.slice(1, 6); // Up to 5 additional thumbnails
+
+          const mainThumbnail = await getImageThumbnails(mainImage, true);
+          const additionalThumbnails = await getImageThumbnails(
+            additionalImages
+          );
+
+          return {
+            name: item.name,
+            path: item.path,
+            category: item.category,
+            imageCount: item.imageCount,
+            mainImage: mainThumbnail[0],
+            additionalImages: additionalThumbnails,
+          };
+        })
       );
+
+      const response: CategoryItemsResponse = {
+        items: itemsWithThumbnails,
+        totalCount: filteredItems.length,
+        page,
+        limit,
+        hasMore: endIndex < filteredItems.length,
+        category: categoryPath,
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error('Error fetching category items:', error);
+      const errorResponse: ErrorResponse = { error: 'Internal server error' };
+      res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse);
     }
+  }
+);
 
-    // Pagination
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + limit;
-    const paginatedItems = filteredItems.slice(startIndex, endIndex);
+// Get images for a specific item
+app.get(
+  '/api/items/:categoryPath/:itemName/images',
+  async (
+    req: Request<
+      ItemPathParams,
+      ItemImagesResponse | ErrorResponse,
+      {},
+      PaginationQuery
+    >,
+    res: Response<ItemImagesResponse | ErrorResponse>
+  ) => {
+    try {
+      const categoryPath = decodeURIComponent(req.params.categoryPath);
+      const itemName = decodeURIComponent(req.params.itemName);
+      const page = parseInt(req.query.page || '1', 10);
+      const limit = parseInt(req.query.limit || '20', 10);
 
-    // Generate thumbnails and metadata for items
-    const itemsWithThumbnails = await Promise.all(
-      paginatedItems.map(async (item) => {
-        // Get the first image as the main thumbnail
-        const mainImage = item.images[0];
-        const { id: thumbnailId, thumbnailPath } = getThumbnailInfo(mainImage.path);
+      const items = await getCategoryItems(categoryPath);
+      const item = items.find((i) => i.name === itemName);
 
-        // Generate thumbnail if needed
-        const isUpToDate = await isImageUpToDate(mainImage.fullPath, thumbnailPath);
-        if (!isUpToDate) {
-          await generateThumbnail(mainImage.fullPath, thumbnailPath);
-        }
+      if (!item) {
+        const errorResponse: ErrorResponse = { error: 'Item not found' };
+        return res.status(HTTP_STATUS.NOT_FOUND).json(errorResponse);
+      }
 
-        const metadata = await getImageMetadata(mainImage.fullPath);
+      // Pagination
+      const startIndex = (page - 1) * limit;
+      const endIndex = startIndex + limit;
+      const paginatedImages = item.images.slice(startIndex, endIndex);
 
-        return {
+      // Generate thumbnails and metadata for images
+      const imagesWithThumbnails = await Promise.all(
+        paginatedImages.map(async (img) => {
+          const { id: thumbnailId, thumbnailPath } = getThumbnailInfo(img.path);
+
+          // Generate thumbnail if needed
+          const isUpToDate = await isImageUpToDate(img.fullPath, thumbnailPath);
+          if (!isUpToDate) {
+            await generateThumbnail(img.fullPath, thumbnailPath);
+          }
+
+          const metadata = await getImageMetadata(img.fullPath);
+
+          return {
+            id: thumbnailId,
+            path: img.path,
+            thumbnail: `/thumbnails/${thumbnailId}`,
+            directory: img.directory,
+            metadata: metadata!,
+          };
+        })
+      );
+
+      const response: ItemImagesResponse = {
+        images: imagesWithThumbnails,
+        totalCount: item.images.length,
+        page,
+        limit,
+        hasMore: endIndex < item.images.length,
+        item: {
           name: item.name,
           path: item.path,
           category: item.category,
-          imageCount: item.imageCount,
-          mainImage: {
-            id: thumbnailId,
-            path: mainImage.path,
-            thumbnail: `/thumbnails/${thumbnailId}`,
-            metadata: metadata!,
-          },
-        };
-      })
-    );
+        },
+      };
 
-    const response: CategoryItemsResponse = {
-      items: itemsWithThumbnails,
-      totalCount: filteredItems.length,
-      page,
-      limit,
-      hasMore: endIndex < filteredItems.length,
-      category: categoryPath,
-    };
-
-    res.json(response);
-  } catch (error) {
-    console.error('Error fetching category items:', error);
-    const errorResponse: ErrorResponse = { error: 'Internal server error' };
-    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse);
-  }
-});
-
-// Get images for a specific item
-app.get('/api/items/:categoryPath/:itemName/images', async (
-  req: Request<ItemPathParams, ItemImagesResponse | ErrorResponse, {}, PaginationQuery>,
-  res: Response<ItemImagesResponse | ErrorResponse>
-) => {
-  try {
-    const categoryPath = decodeURIComponent(req.params.categoryPath);
-    const itemName = decodeURIComponent(req.params.itemName);
-    const page = parseInt(req.query.page || '1', 10);
-    const limit = parseInt(req.query.limit || '20', 10);
-
-    const items = await getCategoryItems(categoryPath);
-    const item = items.find(i => i.name === itemName);
-
-    if (!item) {
-      const errorResponse: ErrorResponse = { error: 'Item not found' };
-      return res.status(HTTP_STATUS.NOT_FOUND).json(errorResponse);
+      res.json(response);
+    } catch (error) {
+      console.error('Error fetching item images:', error);
+      const errorResponse: ErrorResponse = { error: 'Internal server error' };
+      res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse);
     }
-
-    // Pagination
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + limit;
-    const paginatedImages = item.images.slice(startIndex, endIndex);
-
-    // Generate thumbnails and metadata for images
-    const imagesWithThumbnails = await Promise.all(
-      paginatedImages.map(async (img) => {
-        const { id: thumbnailId, thumbnailPath } = getThumbnailInfo(img.path);
-
-        // Generate thumbnail if needed
-        const isUpToDate = await isImageUpToDate(img.fullPath, thumbnailPath);
-        if (!isUpToDate) {
-          await generateThumbnail(img.fullPath, thumbnailPath);
-        }
-
-        const metadata = await getImageMetadata(img.fullPath);
-
-        return {
-          id: thumbnailId,
-          path: img.path,
-          thumbnail: `/thumbnails/${thumbnailId}`,
-          directory: img.directory,
-          metadata: metadata!,
-        };
-      })
-    );
-
-    const response: ItemImagesResponse = {
-      images: imagesWithThumbnails,
-      totalCount: item.images.length,
-      page,
-      limit,
-      hasMore: endIndex < item.images.length,
-      item: {
-        name: item.name,
-        path: item.path,
-        category: item.category,
-      },
-    };
-
-    res.json(response);
-  } catch (error) {
-    console.error('Error fetching item images:', error);
-    const errorResponse: ErrorResponse = { error: 'Internal server error' };
-    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse);
   }
-});
+);
 
 // Get images with pagination and search and folder filtering (legacy support)
-app.get('/api/images', async (
-  req: Request<{}, ImagesResponse | ErrorResponse, {}, SearchQuery>,
-  res: Response<ImagesResponse | ErrorResponse>
-) => {
-  try {
-    const page = parseInt(req.query.page || '1', 10);
-    const limit = parseInt(req.query.limit || '20', 10);
-    const search = req.query.search || '';
+app.get(
+  '/api/images',
+  async (
+    req: Request<{}, ImagesResponse | ErrorResponse, {}, SearchQuery>,
+    res: Response<ImagesResponse | ErrorResponse>
+  ) => {
+    try {
+      const page = parseInt(req.query.page || '1', 10);
+      const limit = parseInt(req.query.limit || '20', 10);
+      const search = req.query.search || '';
 
-    let searchObj: Record<string, string> = {};
-    if (search) {
-      // Parse search string like a="1"&b="2" into an object
-      search.split('&').forEach((pair) => {
-        const [key, value] = pair.split('=');
-        if (key && value) {
-          // Remove surrounding quotes if present
-          searchObj[key] = value.replace(/^"|"$/g, '');
-        }
-      });
-
-      if (Object.keys(searchObj).length === 0) {
-        searchObj.keyword = search;
-      }
-    }
-
-    let images = await getAllImages();
-
-    // Filter by search term
-    if (Object.keys(searchObj).length > 0) {
-      images = images
-        .filter((img) => {
-          if (searchObj.dir) {
-            return img.path.includes(searchObj.dir);
+      let searchObj: Record<string, string> = {};
+      if (search) {
+        // Parse search string like a="1"&b="2" into an object
+        search.split('&').forEach((pair) => {
+          const [key, value] = pair.split('=');
+          if (key && value) {
+            // Remove surrounding quotes if present
+            searchObj[key] = value.replace(/^"|"$/g, '');
           }
-          return true;
-        })
-        .filter((img) => {
-          if (searchObj.keyword)
-            return img.path
-              .toLowerCase()
-              .includes(searchObj.keyword.toLowerCase());
-          return true;
         });
-    }
 
-    // Sort by path
-    images.sort((a, b) => a.path.localeCompare(b.path));
-
-    // Pagination
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + limit;
-    const paginatedImages = images.slice(startIndex, endIndex);
-
-    const timeStart = Date.now();
-    // Generate thumbnails and get metadata for requested images
-    const imageData = await Promise.all(
-      paginatedImages.map(async (img) => {
-        const { id: thumbnailId, thumbnailPath } = getThumbnailInfo(img.path);
-
-        // Generate thumbnail using lazy loading (only if not up to date)
-        const isUpToDate = await isImageUpToDate(img.fullPath, thumbnailPath);
-
-        if (!isUpToDate) {
-          await generateThumbnail(img.fullPath, thumbnailPath);
+        if (Object.keys(searchObj).length === 0) {
+          searchObj.keyword = search;
         }
+      }
 
-        const metadata = await getImageMetadata(img.fullPath);
+      let images = await getAllImages();
 
-        return {
-          id: thumbnailId,
-          path: img.path,
-          thumbnail: `/thumbnails/${thumbnailId}`,
-          directory: img.directory,
-          metadata: metadata!,
-        };
-      })
-    );
+      // Filter by search term
+      if (Object.keys(searchObj).length > 0) {
+        images = images
+          .filter((img) => {
+            if (searchObj.dir) {
+              return img.path.includes(searchObj.dir);
+            }
+            return true;
+          })
+          .filter((img) => {
+            if (searchObj.keyword)
+              return img.path
+                .toLowerCase()
+                .includes(searchObj.keyword.toLowerCase());
+            return true;
+          });
+      }
 
-    console.log(
-      `Processed ${imageData.length} images in ${Date.now() - timeStart}ms`
-    );
+      // Sort by path
+      images.sort((a, b) => a.path.localeCompare(b.path));
 
-    const response: ImagesResponse = {
-      images: imageData,
-      totalCount: images.length,
-      page,
-      limit,
-      hasMore: endIndex < images.length,
-    };
+      // Pagination
+      const startIndex = (page - 1) * limit;
+      const endIndex = startIndex + limit;
+      const paginatedImages = images.slice(startIndex, endIndex);
 
-    res.json(response);
-  } catch (error) {
-    console.error('Error fetching images:', error);
-    const errorResponse: ErrorResponse = { error: 'Internal server error' };
-    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse);
+      const timeStart = Date.now();
+      // Generate thumbnails and get metadata for requested images
+      const imageData = await Promise.all(
+        paginatedImages.map(async (img) => {
+          const { id: thumbnailId, thumbnailPath } = getThumbnailInfo(img.path);
+
+          // Generate thumbnail using lazy loading (only if not up to date)
+          const isUpToDate = await isImageUpToDate(img.fullPath, thumbnailPath);
+
+          if (!isUpToDate) {
+            await generateThumbnail(img.fullPath, thumbnailPath);
+          }
+
+          const metadata = await getImageMetadata(img.fullPath);
+
+          return {
+            id: thumbnailId,
+            path: img.path,
+            thumbnail: `/thumbnails/${thumbnailId}`,
+            directory: img.directory,
+            metadata: metadata!,
+          };
+        })
+      );
+
+      console.log(
+        `Processed ${imageData.length} images in ${Date.now() - timeStart}ms`
+      );
+
+      const response: ImagesResponse = {
+        images: imageData,
+        totalCount: images.length,
+        page,
+        limit,
+        hasMore: endIndex < images.length,
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error('Error fetching images:', error);
+      const errorResponse: ErrorResponse = { error: 'Internal server error' };
+      res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse);
+    }
   }
-});
+);
 
 // Get images aggregated by folders
-app.get('/api/folders', async (
-  req: Request<{}, FoldersResponse | ErrorResponse, {}, { search?: string }>,
-  res: Response<FoldersResponse | ErrorResponse>
-) => {
-  try {
-    const search = req.query.search || '';
+app.get(
+  '/api/folders',
+  async (
+    req: Request<{}, FoldersResponse | ErrorResponse, {}, { search?: string }>,
+    res: Response<FoldersResponse | ErrorResponse>
+  ) => {
+    try {
+      const search = req.query.search || '';
 
-    let images = await getAllImages();
+      let images = await getAllImages();
 
-    // Filter by search term if provided
-    if (search) {
-      images = images.filter(
-        (img) =>
-          img.path.toLowerCase().includes(search.toLowerCase()) ||
-          img.directory.toLowerCase().includes(search.toLowerCase())
-      );
-    }
-
-    // Group images by directory
-    const folderGroups: Record<string, {
-      directory: string;
-      displayName: string;
-      fullPath: string;
-      images: ImageFile[];
-      totalCount: number;
-    }> = {};
-
-    images.forEach((img) => {
-      const folderKey = img.directory || '/';
-      if (!folderGroups[folderKey]) {
-        folderGroups[folderKey] = {
-          directory: folderKey,
-          displayName:
-            folderKey === '/'
-              ? 'Root'
-              : folderKey.split('/').pop() || folderKey,
-          fullPath: folderKey,
-          images: [],
-          totalCount: 0,
-        };
+      // Filter by search term if provided
+      if (search) {
+        images = images.filter(
+          (img) =>
+            img.path.toLowerCase().includes(search.toLowerCase()) ||
+            img.directory.toLowerCase().includes(search.toLowerCase())
+        );
       }
-      folderGroups[folderKey].images.push(img);
-      folderGroups[folderKey].totalCount++;
-    });
 
-    // Convert to array and sort by directory name
-    const folders = Object.values(folderGroups).sort((a, b) =>
-      a.directory.localeCompare(b.directory)
-    );
-
-    // Process each folder to get thumbnail data
-    const folderData = await Promise.all(
-      folders.map(async (folder) => {
-        // Sort images within folder - prioritize "main" or "封面" files first
-        folder.images.sort((a, b) => {
-          const aName = path
-            .basename(a.path, path.extname(a.path))
-            .toLowerCase();
-          const bName = path
-            .basename(b.path, path.extname(b.path))
-            .toLowerCase();
-
-          // Check if either file is a main/cover image
-          const aIsMain = aName === 'main' || aName === '封面';
-          const bIsMain = bName === 'main' || bName === '封面';
-
-          if (aIsMain && !bIsMain) return -1;
-          if (!aIsMain && bIsMain) return 1;
-
-          // If both or neither are main images, sort alphabetically
-          return a.path.localeCompare(b.path);
-        });
-
-        // Get main image (first image) and up to 5 additional images
-        const mainImage = folder.images[0];
-        const additionalImages = folder.images.slice(1, 6); // Up to 5 more
-
-        // Generate thumbnail data for main image
-        const { thumbnailPath: mainThumbnailPath, id: mainThumbnailId } =
-          getThumbnailInfo(mainImage.path);
-
-        // Ensure main thumbnail exists
-        const isUpToDate = await isImageUpToDate(
-          mainImage.fullPath,
-          mainThumbnailPath
-        );
-        if (!isUpToDate) {
-          await generateThumbnail(mainImage.fullPath, mainThumbnailPath);
+      // Group images by directory
+      const folderGroups: Record<
+        string,
+        {
+          directory: string;
+          displayName: string;
+          fullPath: string;
+          images: ImageFile[];
+          totalCount: number;
         }
+      > = {};
 
-        const mainMetadata = await getImageMetadata(mainImage.fullPath);
+      images.forEach((img) => {
+        const folderKey = img.directory || '/';
+        if (!folderGroups[folderKey]) {
+          folderGroups[folderKey] = {
+            directory: folderKey,
+            displayName:
+              folderKey === '/'
+                ? 'Root'
+                : folderKey.split('/').pop() || folderKey,
+            fullPath: folderKey,
+            images: [],
+            totalCount: 0,
+          };
+        }
+        folderGroups[folderKey].images.push(img);
+        folderGroups[folderKey].totalCount++;
+      });
 
-        // Generate thumbnail data for additional images
-        const additionalThumbnails = await Promise.all(
-          additionalImages.map(async (img) => {
-            const { thumbnailPath, id: thumbnailId } = getThumbnailInfo(img.path);
+      // Convert to array and sort by directory name
+      const folders = Object.values(folderGroups).sort((a, b) =>
+        a.directory.localeCompare(b.directory)
+      );
 
-            // Ensure thumbnail exists
-            const isUpToDate = await isImageUpToDate(
-              img.fullPath,
-              thumbnailPath
-            );
-            if (!isUpToDate) {
-              await generateThumbnail(img.fullPath, thumbnailPath);
-            }
+      // Process each folder to get thumbnail data
+      const folderData = await Promise.all(
+        folders.map(async (folder) => {
+          // Sort images within folder - prioritize "main" or "封面" files first
+          folder.images.sort((a, b) => {
+            const aName = path
+              .basename(a.path, path.extname(a.path))
+              .toLowerCase();
+            const bName = path
+              .basename(b.path, path.extname(b.path))
+              .toLowerCase();
 
-            return {
-              id: thumbnailId,
-              path: img.path,
-              thumbnail: `/thumbnails/${thumbnailId}`,
-              filename: path.basename(img.path),
-            };
-          })
-        );
+            // Check if either file is a main/cover image
+            const aIsMain = aName === 'main' || aName === '封面';
+            const bIsMain = bName === 'main' || bName === '封面';
 
-        return {
-          directory: folder.directory,
-          displayName: folder.displayName,
-          totalCount: folder.totalCount,
-          mainImage: {
-            id: mainThumbnailId,
-            path: mainImage.path,
-            thumbnail: `/thumbnails/${mainThumbnailId}`,
-            metadata: mainMetadata!,
-          },
-          additionalImages: additionalThumbnails,
-          hasMore: folder.totalCount > 6,
-        };
-      })
-    );
+            if (aIsMain && !bIsMain) return -1;
+            if (!aIsMain && bIsMain) return 1;
 
-    const response: FoldersResponse = {
-      folders: folderData,
-      totalFolders: folderData.length,
-      totalImages: images.length,
-    };
+            // If both or neither are main images, sort alphabetically
+            return a.path.localeCompare(b.path);
+          });
 
-    res.json(response);
-  } catch (error) {
-    console.error('Error fetching folder data:', error);
-    const errorResponse: ErrorResponse = { error: 'Internal server error' };
-    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse);
+          // Get main image (first image) and up to 5 additional images
+          const mainImage = folder.images[0];
+          const additionalImages = folder.images.slice(1, 6); // Up to 5 more
+
+          const mainImageThumbnail = await getImageThumbnails(mainImage, true);
+          const additionalThumbnails = await getImageThumbnails(
+            additionalImages
+          );
+
+          return {
+            directory: folder.directory,
+            displayName: folder.displayName,
+            totalCount: folder.totalCount,
+            mainImage: mainImageThumbnail[0],
+            additionalImages: additionalThumbnails,
+            hasMore: folder.totalCount > 6,
+          };
+        })
+      );
+
+      const response: FoldersResponse = {
+        folders: folderData,
+        totalFolders: folderData.length,
+        totalImages: images.length,
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error('Error fetching folder data:', error);
+      const errorResponse: ErrorResponse = { error: 'Internal server error' };
+      res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse);
+    }
   }
-});
+);
 
 // Get single image metadata
-app.get('/api/image/:id', async (
-  req: Request<ImageIdParams, ImageResponse | ErrorResponse>,
-  res: Response<ImageResponse | ErrorResponse>
-) => {
-  try {
-    const imagePath = Buffer.from(req.params.id, 'base64').toString();
-    const fullPath = path.join(IMAGES_DIR, imagePath);
+app.get(
+  '/api/image/:id',
+  async (
+    req: Request<ImageIdParams, ImageResponse | ErrorResponse>,
+    res: Response<ImageResponse | ErrorResponse>
+  ) => {
+    try {
+      const imagePath = Buffer.from(req.params.id, 'base64').toString();
+      const fullPath = path.join(IMAGES_DIR, imagePath);
 
-    if (!(await fs.pathExists(fullPath))) {
-      const errorResponse: ErrorResponse = { error: 'Image not found' };
-      return res.status(HTTP_STATUS.NOT_FOUND).json(errorResponse);
+      if (!(await fs.pathExists(fullPath))) {
+        const errorResponse: ErrorResponse = { error: 'Image not found' };
+        return res.status(HTTP_STATUS.NOT_FOUND).json(errorResponse);
+      }
+
+      const metadata = await getImageMetadata(fullPath);
+
+      const response: ImageResponse = {
+        id: req.params.id,
+        path: imagePath,
+        url: `/images/${imagePath}`,
+        metadata: metadata!,
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error('Error fetching image:', error);
+      const errorResponse: ErrorResponse = { error: 'Internal server error' };
+      res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse);
     }
-
-    const metadata = await getImageMetadata(fullPath);
-
-    const response: ImageResponse = {
-      id: req.params.id,
-      path: imagePath,
-      url: `/images/${imagePath}`,
-      metadata: metadata!,
-    };
-
-    res.json(response);
-  } catch (error) {
-    console.error('Error fetching image:', error);
-    const errorResponse: ErrorResponse = { error: 'Internal server error' };
-    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse);
   }
-});
+);
 
 // Refresh cache
-app.post('/api/refresh', async (
-  req: Request<{}, RefreshResponse | ErrorResponse>,
-  res: Response<RefreshResponse | ErrorResponse>
-) => {
-  try {
-    cache.flushAll();
-    const images = await getAllImages();
-    const categories = await getAllCategories();
-    
-    const response: RefreshResponse = {
-      message: 'Cache refreshed',
-      imageCount: images.length,
-      categoryCount: categories.length,
-    };
-    
-    res.json(response);
-  } catch (error) {
-    console.error('Error refreshing cache:', error);
-    const errorResponse: ErrorResponse = { error: 'Internal server error' };
-    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse);
+app.post(
+  '/api/refresh',
+  async (
+    req: Request<{}, RefreshResponse | ErrorResponse>,
+    res: Response<RefreshResponse | ErrorResponse>
+  ) => {
+    try {
+      cache.flushAll();
+      const images = await getAllImages();
+      const categories = await getAllCategories();
+
+      const response: RefreshResponse = {
+        message: 'Cache refreshed',
+        imageCount: images.length,
+        categoryCount: categories.length,
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error('Error refreshing cache:', error);
+      const errorResponse: ErrorResponse = { error: 'Internal server error' };
+      res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse);
+    }
   }
-});
+);
 
 // Daemon control routes
-app.get('/api/daemon/status', (
-  req: Request<{}, DaemonStatus | ErrorResponse>,
-  res: Response<DaemonStatus | ErrorResponse>
-) => {
-  try {
-    const status = thumbnailDaemon.getStatus();
-    res.json(status);
-  } catch (error) {
-    console.error('Error getting daemon status:', error);
-    const errorResponse: ErrorResponse = { error: 'Internal server error' };
-    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse);
+app.get(
+  '/api/daemon/status',
+  (
+    req: Request<{}, DaemonStatus | ErrorResponse>,
+    res: Response<DaemonStatus | ErrorResponse>
+  ) => {
+    try {
+      const status = thumbnailDaemon.getStatus();
+      res.json(status);
+    } catch (error) {
+      console.error('Error getting daemon status:', error);
+      const errorResponse: ErrorResponse = { error: 'Internal server error' };
+      res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse);
+    }
   }
-});
+);
 
-app.post('/api/daemon/start', (
-  req: Request<{}, DaemonResponse | ErrorResponse>,
-  res: Response<DaemonResponse | ErrorResponse>
-) => {
-  try {
-    thumbnailDaemon.start();
-    const response: DaemonResponse = { message: 'Thumbnail daemon started' };
-    res.json(response);
-  } catch (error) {
-    console.error('Error starting daemon:', error);
-    const errorResponse: ErrorResponse = { error: 'Failed to start daemon' };
-    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse);
+app.post(
+  '/api/daemon/start',
+  (
+    req: Request<{}, DaemonResponse | ErrorResponse>,
+    res: Response<DaemonResponse | ErrorResponse>
+  ) => {
+    try {
+      thumbnailDaemon.start();
+      const response: DaemonResponse = { message: 'Thumbnail daemon started' };
+      res.json(response);
+    } catch (error) {
+      console.error('Error starting daemon:', error);
+      const errorResponse: ErrorResponse = { error: 'Failed to start daemon' };
+      res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse);
+    }
   }
-});
+);
 
-app.post('/api/daemon/stop', (
-  req: Request<{}, DaemonResponse | ErrorResponse>,
-  res: Response<DaemonResponse | ErrorResponse>
-) => {
-  try {
-    thumbnailDaemon.stop();
-    const response: DaemonResponse = { message: 'Thumbnail daemon stopped' };
-    res.json(response);
-  } catch (error) {
-    console.error('Error stopping daemon:', error);
-    const errorResponse: ErrorResponse = { error: 'Failed to stop daemon' };
-    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse);
+app.post(
+  '/api/daemon/stop',
+  (
+    req: Request<{}, DaemonResponse | ErrorResponse>,
+    res: Response<DaemonResponse | ErrorResponse>
+  ) => {
+    try {
+      thumbnailDaemon.stop();
+      const response: DaemonResponse = { message: 'Thumbnail daemon stopped' };
+      res.json(response);
+    } catch (error) {
+      console.error('Error stopping daemon:', error);
+      const errorResponse: ErrorResponse = { error: 'Failed to stop daemon' };
+      res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse);
+    }
   }
-});
+);
 
-app.post('/api/daemon/generate-all', async (
-  req: Request<{}, DaemonResponse | ErrorResponse>,
-  res: Response<DaemonResponse | ErrorResponse>
-) => {
-  try {
-    // Run in background to avoid request timeout
-    thumbnailDaemon.generateAllThumbnails().catch((error) => {
-      console.error('Error in bulk thumbnail generation:', error);
-    });
-    const response: DaemonResponse = { message: 'Bulk thumbnail generation started' };
-    res.json(response);
-  } catch (error) {
-    console.error('Error starting bulk generation:', error);
-    const errorResponse: ErrorResponse = { error: 'Failed to start bulk generation' };
-    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse);
+app.post(
+  '/api/daemon/generate-all',
+  async (
+    req: Request<{}, DaemonResponse | ErrorResponse>,
+    res: Response<DaemonResponse | ErrorResponse>
+  ) => {
+    try {
+      // Run in background to avoid request timeout
+      thumbnailDaemon.generateAllThumbnails().catch((error) => {
+        console.error('Error in bulk thumbnail generation:', error);
+      });
+      const response: DaemonResponse = {
+        message: 'Bulk thumbnail generation started',
+      };
+      res.json(response);
+    } catch (error) {
+      console.error('Error starting bulk generation:', error);
+      const errorResponse: ErrorResponse = {
+        error: 'Failed to start bulk generation',
+      };
+      res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse);
+    }
   }
-});
+);
 
-app.post('/api/daemon/rebuild-index', async (
-  req: Request<{}, RebuildIndexResponse | ErrorResponse>,
-  res: Response<RebuildIndexResponse | ErrorResponse>
-) => {
-  try {
-    console.log('🔧 Rebuilding thumbnail index...');
+app.post(
+  '/api/daemon/rebuild-index',
+  async (
+    req: Request<{}, RebuildIndexResponse | ErrorResponse>,
+    res: Response<RebuildIndexResponse | ErrorResponse>
+  ) => {
+    try {
+      console.log('🔧 Rebuilding thumbnail index...');
 
-    // Clear current index
-    thumbnailIndex = {};
+      // Clear current index
+      thumbnailIndex = {};
 
-    // Scan thumbnails directory and rebuild index
-    const images = await scanImagesDirectory(IMAGES_DIR);
-    let rebuilt = 0;
+      // Scan thumbnails directory and rebuild index
+      const images = await scanImagesDirectory(IMAGES_DIR);
+      let rebuilt = 0;
 
-    for (const img of images) {
-      const { thumbnailPath } = getThumbnailInfo(img.path);
+      for (const img of images) {
+        const { thumbnailPath } = getThumbnailInfo(img.path);
 
-      if (await fs.pathExists(thumbnailPath)) {
-        // Get metadata for the image
-        const metadata = await getImageMetadataInternal(img.fullPath);
-        await updateThumbnailIndex(img.fullPath, thumbnailPath, metadata);
-        rebuilt++;
+        if (await fs.pathExists(thumbnailPath)) {
+          // Get metadata for the image
+          const metadata = await getImageMetadataInternal(img.fullPath);
+          await updateThumbnailIndex(img.fullPath, thumbnailPath, metadata);
+          rebuilt++;
 
-        if (rebuilt % 50 === 0) {
-          console.log(`🔧 Rebuilt ${rebuilt} index entries...`);
+          if (rebuilt % 50 === 0) {
+            console.log(`🔧 Rebuilt ${rebuilt} index entries...`);
+          }
         }
       }
+
+      await saveThumbnailIndex();
+      console.log(`✅ Thumbnail index rebuilt with ${rebuilt} entries`);
+
+      const response: RebuildIndexResponse = {
+        message: 'Thumbnail index rebuilt successfully',
+        entries: rebuilt,
+      };
+
+      res.json(response);
+    } catch (error) {
+      console.error('Error rebuilding index:', error);
+      const errorResponse: ErrorResponse = { error: 'Failed to rebuild index' };
+      res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse);
     }
-
-    await saveThumbnailIndex();
-    console.log(`✅ Thumbnail index rebuilt with ${rebuilt} entries`);
-
-    const response: RebuildIndexResponse = {
-      message: 'Thumbnail index rebuilt successfully',
-      entries: rebuilt,
-    };
-
-    res.json(response);
-  } catch (error) {
-    console.error('Error rebuilding index:', error);
-    const errorResponse: ErrorResponse = { error: 'Failed to rebuild index' };
-    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse);
   }
-});
+);
 
 // Get thumbnail index statistics
-app.get('/api/daemon/index-stats', (
-  req: Request<{}, IndexStats | ErrorResponse>,
-  res: Response<IndexStats | ErrorResponse>
-) => {
-  try {
-    const entries = Object.values(thumbnailIndex);
-    const stats: IndexStats = {
-      totalEntries: entries.length,
-      entriesWithMetadata: entries.filter((entry) => entry.metadata).length,
-      entriesWithThumbnails: entries.filter((entry) => entry.thumbnailPath).length,
-      oldestEntry:
-        entries.length > 0
-          ? Math.min(...entries.map((e) => e.createdAt || 0))
-          : null,
-      newestEntry:
-        entries.length > 0
-          ? Math.max(...entries.map((e) => e.updatedAt || e.createdAt || 0))
-          : null,
-      indexFile: THUMBNAIL_INDEX_FILE,
-      indexSize: JSON.stringify(thumbnailIndex).length,
-    };
+app.get(
+  '/api/daemon/index-stats',
+  (
+    req: Request<{}, IndexStats | ErrorResponse>,
+    res: Response<IndexStats | ErrorResponse>
+  ) => {
+    try {
+      const entries = Object.values(thumbnailIndex);
+      const stats: IndexStats = {
+        totalEntries: entries.length,
+        entriesWithMetadata: entries.filter((entry) => entry.metadata).length,
+        entriesWithThumbnails: entries.filter((entry) => entry.thumbnailPath)
+          .length,
+        oldestEntry:
+          entries.length > 0
+            ? Math.min(...entries.map((e) => e.createdAt || 0))
+            : null,
+        newestEntry:
+          entries.length > 0
+            ? Math.max(...entries.map((e) => e.updatedAt || e.createdAt || 0))
+            : null,
+        indexFile: THUMBNAIL_INDEX_FILE,
+        indexSize: JSON.stringify(thumbnailIndex).length,
+      };
 
-    res.json(stats);
-  } catch (error) {
-    console.error('Error getting index stats:', error);
-    const errorResponse: ErrorResponse = { error: 'Internal server error' };
-    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse);
+      res.json(stats);
+    } catch (error) {
+      console.error('Error getting index stats:', error);
+      const errorResponse: ErrorResponse = { error: 'Internal server error' };
+      res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse);
+    }
   }
-});
+);
 
 // Serve main page
 app.get('/', (req: Request, res: Response) => {
@@ -1390,24 +1463,27 @@ app.get('/', (req: Request, res: Response) => {
 });
 
 // Health check endpoint for Docker
-app.get('/health', (
-  req: Request<{}, HealthResponse | ErrorResponse>,
-  res: Response<HealthResponse | ErrorResponse>
-) => {
-  try {
-    const response: HealthResponse = {
-      status: 'healthy',
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
-      daemon: thumbnailDaemon.getStatus().isWatching,
-    };
-    res.status(HTTP_STATUS.OK).json(response);
-  } catch (error) {
-    console.error('Error in health check:', error);
-    const errorResponse: ErrorResponse = { error: 'Internal server error' };
-    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse);
+app.get(
+  '/health',
+  (
+    req: Request<{}, HealthResponse | ErrorResponse>,
+    res: Response<HealthResponse | ErrorResponse>
+  ) => {
+    try {
+      const response: HealthResponse = {
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        daemon: thumbnailDaemon.getStatus().isWatching,
+      };
+      res.status(HTTP_STATUS.OK).json(response);
+    } catch (error) {
+      console.error('Error in health check:', error);
+      const errorResponse: ErrorResponse = { error: 'Internal server error' };
+      res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json(errorResponse);
+    }
   }
-});
+);
 
 // Serve React app in production
 if (process.env.NODE_ENV === 'production') {
@@ -1417,7 +1493,11 @@ if (process.env.NODE_ENV === 'production') {
   // Catch all handler: send back React's index.html file for any non-API routes
   app.get('*', (req: Request, res: Response) => {
     // Skip API routes
-    if (req.path.startsWith('/api') || req.path.startsWith('/images') || req.path.startsWith('/thumbnails')) {
+    if (
+      req.path.startsWith('/api') ||
+      req.path.startsWith('/images') ||
+      req.path.startsWith('/thumbnails')
+    ) {
       const errorResponse: ErrorResponse = { error: 'API endpoint not found' };
       return res.status(HTTP_STATUS.NOT_FOUND).json(errorResponse);
     }

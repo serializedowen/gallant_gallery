@@ -47,7 +47,7 @@ const DaemonModal: React.FC<DaemonModalProps> = ({
     } catch (error) {
       console.error('Error updating daemon status:', error);
     }
-  }, [onStatusUpdate]);
+  }, []);
 
   useEffect(() => {
     if (open) {
@@ -180,7 +180,7 @@ const DaemonModal: React.FC<DaemonModalProps> = ({
               </Typography>
               <Grid container spacing={2}>
                 <Grid item xs={12} sm={4}>
-                  <Box p={2} bgcolor="grey.50" borderRadius={1}>
+                  <Box p={2} borderRadius={1}>
                     <Typography variant="body2" color="textSecondary">
                       {t('daemon.queue')}
                     </Typography>
@@ -190,7 +190,7 @@ const DaemonModal: React.FC<DaemonModalProps> = ({
                   </Box>
                 </Grid>
                 <Grid item xs={12} sm={4}>
-                  <Box p={2} bgcolor="grey.50" borderRadius={1}>
+                  <Box p={2}  borderRadius={1}>
                     <Typography variant="body2" color="textSecondary">
                       {t('daemon.indexEntries')}
                     </Typography>
@@ -202,7 +202,7 @@ const DaemonModal: React.FC<DaemonModalProps> = ({
                   </Box>
                 </Grid>
                 <Grid item xs={12} sm={4}>
-                  <Box p={2} bgcolor="grey.50" borderRadius={1}>
+                  <Box p={2} borderRadius={1}>
                     <Typography variant="body2" color="textSecondary">
                       {t('daemon.metadataCache')}
                     </Typography>
@@ -218,7 +218,7 @@ const DaemonModal: React.FC<DaemonModalProps> = ({
 
             {/* Thumbnail Index Info */}
             <Box mb={3}>
-              <Box p={2} bgcolor="grey.50" borderRadius={1}>
+              <Box p={2} borderRadius={1}>
                 <Typography variant="body2" color="textSecondary">
                   {t('daemon.thumbnailIndex')}
                 </Typography>
