@@ -11,7 +11,7 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "declaration": true,
-    "outDir": "./dist",
+    "outDir": "server/dist",
     "baseUrl": "./",
     "sourceMap": true,
     "experimentalDecorators": true,
@@ -24,7 +24,7 @@
   "files": [],
   "exclude": [
     "node_modules",
-    "dist",
+    "server/dist",
     "client"
   ]
 }

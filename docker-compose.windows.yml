@@ -2,14 +2,18 @@ version: '3.8'
 
 services:
   gallant-gallery:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     # image: gallant_gallery-gallant-gallery:latest
     ports:
       - "${GALLERY_PORT:-3000}:3000"
     environment:
       - PORT=3000
       - IMAGES_DIR=/app/images
+      - CACHE_DIR=/app/cache
       - NODE_ENV=production
+      - CLIENT_BUILD_PATH=/app/client/build
     volumes:
       # Mount images directory as read-only (Windows path format)
       - "${IMAGES_PATH}:/app/images:ro"
