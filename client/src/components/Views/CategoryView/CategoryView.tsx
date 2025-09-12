@@ -10,7 +10,7 @@ import Lightbox from '../../Lightbox/Lightbox';
 import { Grid, CircularProgress, Box, Alert, Button } from '@mui/material';
 
 const CategoryView: React.FC = () => {
-  const { categoryName } = useParams<{ categoryName?: string }>();
+  const { categoryName, folderName } = useParams<{ categoryName?: string; folderName?: string }>();
   const navigate = useNavigate();
   const {
     selectedCategory,
@@ -56,6 +56,26 @@ const CategoryView: React.FC = () => {
     }
   }, [selectedCategory]);
 
+  // Handle folder selection from URL
+  useEffect(() => {
+    if (folderName && categoryItems.length > 0) {
+      const decodedFolderName = decodeURIComponent(folderName);
+      const folder = categoryItems.find(item => item.name === decodedFolderName);
+      if (folder) {
+        setSelectedFolder({
+          name: folder.name,
+          directory: folder.path,
+          categoryName: selectedCategory || undefined,
+        });
+        setSelectedItem(folder.name);
+      }
+    } else if (!folderName) {
+      // Clear selected folder if no folder in URL
+      setSelectedFolder(null);
+      setSelectedItem(null);
+    }
+  }, [folderName, categoryItems, selectedCategory, setSelectedItem]);
+
   const loadCategories = async () => {
     try {
       setIsLoading(true);
@@ -98,7 +118,8 @@ const CategoryView: React.FC = () => {
       directory: item.path,
       categoryName: selectedCategory || undefined,
     });
-    // Don't navigate - keep folder content in the right panel
+    // Navigate to the folder URL within the category
+    navigate(`/category/${encodeURIComponent(selectedCategory!)}/folder/${encodeURIComponent(item.name)}`);
     console.log('Selected item:', item);
   };
 
@@ -153,6 +174,7 @@ const CategoryView: React.FC = () => {
           <CategoryContent
             selectedCategory={selectedCategory}
             items={categoryItems}
+            selectedFolderName={selectedFolder?.name || null}
             onItemSelect={handleItemSelect}
           />
         )}

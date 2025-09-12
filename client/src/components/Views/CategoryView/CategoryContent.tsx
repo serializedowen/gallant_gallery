@@ -17,12 +17,14 @@ import CategoryIcon from '@mui/icons-material/Category';
 interface CategoryContentProps {
   selectedCategory: string | null;
   items: CategoryItem[];
+  selectedFolderName?: string | null;
   onItemSelect: (item: CategoryItem) => void;
 }
 
 const CategoryContent: React.FC<CategoryContentProps> = ({
   selectedCategory,
   items,
+  selectedFolderName,
   onItemSelect,
 }) => {
   const { t } = useApp();
@@ -110,6 +112,10 @@ const CategoryContent: React.FC<CategoryContentProps> = ({
                       variant='h6'
                       component='div'
                       noWrap
+                      sx={{
+                        color: selectedFolderName === item.name ? 'primary.main' : 'inherit',
+                        fontWeight: selectedFolderName === item.name ? 'bold' : 'normal',
+                      }}
                     >
                       {item.name}
                     </Typography>

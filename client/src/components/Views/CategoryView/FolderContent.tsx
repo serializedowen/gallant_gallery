@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Image } from '../../../types/api-definitions';
 import { useApp } from '../../../contexts/AppContext';
 import ApiService from '../../../services/api';
@@ -11,8 +12,13 @@ import {
   Button,
   Alert,
   Paper,
+  IconButton,
+  Breadcrumbs,
+  Link,
 } from '@mui/material';
 import FolderIcon from '@mui/icons-material/Folder';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import HomeIcon from '@mui/icons-material/Home';
 
 interface FolderContentProps {
   selectedFolder: {
@@ -28,6 +34,7 @@ const FolderContent: React.FC<FolderContentProps> = ({
   onImageClick,
 }) => {
   const { t, isLoading, setIsLoading } = useApp();
+  const navigate = useNavigate();
   const [images, setImages] = useState<Image[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
@@ -104,6 +111,14 @@ const FolderContent: React.FC<FolderContentProps> = ({
     onImageClick(index, images);
   };
 
+  const handleBackToCategory = () => {
+    if (selectedFolder?.categoryName) {
+      navigate(`/category/${encodeURIComponent(selectedFolder.categoryName)}`);
+    } else {
+      navigate('/categories');
+    }
+  };
+
   if (!selectedFolder) {
     return (
       <Paper elevation={2} sx={{ p: 2, height: '100%', overflow: 'hidden' }}>
@@ -149,6 +164,63 @@ const FolderContent: React.FC<FolderContentProps> = ({
 
   return (
     <Paper elevation={2} sx={{ p: 2, height: '100%', overflowY: 'auto' }}>
+      {/* Navigation Breadcrumbs */}
+      <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <IconButton
+          onClick={handleBackToCategory}
+          size="small"
+          sx={{ 
+            mr: 1,
+            '&:hover': {
+              backgroundColor: 'action.hover',
+            }
+          }}
+        >
+          <ArrowBackIcon />
+        </IconButton>
+        
+        <Breadcrumbs aria-label="breadcrumb">
+          <Link
+            component="button"
+            variant="body2"
+            onClick={() => navigate('/categories')}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              textDecoration: 'none',
+              color: 'text.secondary',
+              '&:hover': {
+                color: 'primary.main',
+              }
+            }}
+          >
+            <HomeIcon sx={{ mr: 0.5, fontSize: 'inherit' }} />
+            {t('nav.categories')}
+          </Link>
+          
+          {selectedFolder?.categoryName && (
+            <Link
+              component="button"
+              variant="body2"
+              onClick={handleBackToCategory}
+              sx={{
+                textDecoration: 'none',
+                color: 'text.secondary',
+                '&:hover': {
+                  color: 'primary.main',
+                }
+              }}
+            >
+              {selectedFolder.categoryName}
+            </Link>
+          )}
+          
+          <Typography variant="body2" color="text.primary">
+            {selectedFolder.name}
+          </Typography>
+        </Breadcrumbs>
+      </Box>
+
       <Box sx={{ mb: 2 }}>
         <Typography variant='h4' component='h2' gutterBottom>
           {selectedFolder.name}

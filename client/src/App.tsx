@@ -18,6 +18,7 @@ const AppContent = () => {
           <Route path="/" element={<Navigate to="/categories" replace />} />
           <Route path="/categories" element={<CategoryView />} />
           <Route path="/category/:categoryName" element={<CategoryView />} />
+          <Route path="/category/:categoryName/folder/:folderName" element={<CategoryView />} />
           <Route path="/folder/:folderName" element={<GridView />} />
           <Route path="/grid" element={<GridView />} />
         </Routes>
