@@ -21,7 +21,9 @@ import {
   ErrorResponse,
 } from '../types/api-definitions';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:12512';
+// In production, if no explicit URL is set, use relative path which will work with containers
+const API_BASE_URL =
+  process.env.NODE_ENV === 'production' ? '' : 'http://localhost:12512';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -51,7 +53,9 @@ export class ApiService {
     params?: PaginationQuery
   ): Promise<ItemImagesResponse> {
     const response: AxiosResponse<ItemImagesResponse> = await api.get(
-      `/api/items/${encodeURIComponent(categoryPath)}/${encodeURIComponent(itemName)}/images`,
+      `/api/items/${encodeURIComponent(categoryPath)}/${encodeURIComponent(
+        itemName
+      )}/images`,
       {
         params: {
           page: params?.page,
@@ -63,16 +67,23 @@ export class ApiService {
   }
 
   // Folder-related APIs
-  static async getFolders(params?: { search?: string }): Promise<FoldersResponse> {
-    const response: AxiosResponse<FoldersResponse> = await api.get('/api/folders', {
-      params: params,
-    });
+  static async getFolders(params?: {
+    search?: string;
+  }): Promise<FoldersResponse> {
+    const response: AxiosResponse<FoldersResponse> = await api.get(
+      '/api/folders',
+      {
+        params: params,
+      }
+    );
     return response.data;
   }
 
   // Category-related APIs
   static async getCategories(): Promise<CategoriesResponse> {
-    const response: AxiosResponse<CategoriesResponse> = await api.get('/api/categories');
+    const response: AxiosResponse<CategoriesResponse> = await api.get(
+      '/api/categories'
+    );
     return response.data;
   }
 
@@ -102,39 +113,53 @@ export class ApiService {
   }
 
   static async startDaemon(): Promise<DaemonResponse> {
-    const response: AxiosResponse<DaemonResponse> = await api.post('/api/daemon/start');
+    const response: AxiosResponse<DaemonResponse> = await api.post(
+      '/api/daemon/start'
+    );
     return response.data;
   }
 
   static async stopDaemon(): Promise<DaemonResponse> {
-    const response: AxiosResponse<DaemonResponse> = await api.post('/api/daemon/stop');
+    const response: AxiosResponse<DaemonResponse> = await api.post(
+      '/api/daemon/stop'
+    );
     return response.data;
   }
 
   static async generateAllThumbnails(): Promise<DaemonResponse> {
-    const response: AxiosResponse<DaemonResponse> = await api.post('/api/daemon/generate-all');
+    const response: AxiosResponse<DaemonResponse> = await api.post(
+      '/api/daemon/generate-all'
+    );
     return response.data;
   }
 
   static async rebuildIndex(): Promise<RebuildIndexResponse> {
-    const response: AxiosResponse<RebuildIndexResponse> = await api.post('/api/daemon/rebuild-index');
+    const response: AxiosResponse<RebuildIndexResponse> = await api.post(
+      '/api/daemon/rebuild-index'
+    );
     return response.data;
   }
 
   static async getIndexStats(): Promise<IndexStats> {
-    const response: AxiosResponse<IndexStats> = await api.get('/api/daemon/index-stats');
+    const response: AxiosResponse<IndexStats> = await api.get(
+      '/api/daemon/index-stats'
+    );
     return response.data;
   }
 
   // Utility APIs
   static async refreshGallery(): Promise<RefreshResponse> {
-    const response: AxiosResponse<RefreshResponse> = await api.post('/api/refresh');
+    const response: AxiosResponse<RefreshResponse> = await api.post(
+      '/api/refresh'
+    );
     return response.data;
   }
 
   // Get single image by ID
   static async getImage(id: string): Promise<ImageResponse> {
-    const response: AxiosResponse<ImageResponse> = await api.get(`/api/image/${encodeURIComponent(id)}`);
+    const response: AxiosResponse<ImageResponse> = await api.get(
+      `/api/image/${encodeURIComponent(id)}`
+    );
     return response.data;
   }
 

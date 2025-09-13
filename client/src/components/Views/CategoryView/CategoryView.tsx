@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Category, CategoryItem, Image } from '../../../types/api-definitions';
 import { useApp } from '../../../contexts/AppContext';
@@ -23,6 +23,9 @@ const CategoryView: React.FC = () => {
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoryItems, setCategoryItems] = useState<CategoryItem[]>([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [selectedFolder, setSelectedFolder] = useState<{
     name: string;
     directory: string;
@@ -32,9 +35,57 @@ const CategoryView: React.FC = () => {
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const loadCategories = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const response = await ApiService.getCategories();
+      setCategories(response.categories);
+    } catch (err) {
+      console.error('Error loading categories:', err);
+      setError(t('error.loadCategories'));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [setIsLoading, setError, setCategories, t]);
+
+  const loadCategoryItems = useCallback(async (categoryName: string, currentPage: number = 1) => {
+    try {
+      setIsLoading(currentPage === 1);
+      setIsLoadingMore(currentPage > 1);
+      setError(null);
+      
+      const response = await ApiService.getCategoryItems(categoryName, {
+        page: currentPage.toString(),
+        limit: '20',
+      });
+
+      if (currentPage === 1) {
+        setCategoryItems(response.items);
+      } else {
+        setCategoryItems(prev => [...prev, ...response.items]);
+      }
+
+      setHasMore(response.hasMore);
+      setPage(currentPage);
+    } catch (err) {
+      console.error('Error loading category items:', err);
+      setError(t('error.loadItems'));
+    } finally {
+      setIsLoading(false);
+      setIsLoadingMore(false);
+    }
+  }, [setIsLoading, setIsLoadingMore, setError, setCategoryItems, setHasMore, setPage, t]);
+
+  const loadMore = useCallback(() => {
+    if (!isLoadingMore && hasMore && selectedCategory) {
+      loadCategoryItems(selectedCategory, page + 1);
+    }
+  }, [isLoadingMore, hasMore, selectedCategory, page, loadCategoryItems]);
+
   useEffect(() => {
     loadCategories();
-  }, []);
+  }, [loadCategories]);
 
   useEffect(() => {
     if (categoryName) {
@@ -46,7 +97,7 @@ const CategoryView: React.FC = () => {
       setSelectedCategory(firstCategory);
       navigate(`/category/${encodeURIComponent(firstCategory)}`, { replace: true });
     }
-  }, [categories, categoryName, selectedCategory, navigate]);
+  }, [categories, categoryName, selectedCategory, navigate, setSelectedCategory]);
 
   useEffect(() => {
     if (selectedCategory) {
@@ -54,7 +105,7 @@ const CategoryView: React.FC = () => {
     } else {
       setCategoryItems([]);
     }
-  }, [selectedCategory]);
+  }, [selectedCategory, loadCategoryItems, setCategoryItems]);
 
   // Handle folder selection from URL
   useEffect(() => {
@@ -75,34 +126,6 @@ const CategoryView: React.FC = () => {
       setSelectedItem(null);
     }
   }, [folderName, categoryItems, selectedCategory, setSelectedItem]);
-
-  const loadCategories = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const response = await ApiService.getCategories();
-      setCategories(response.categories);
-    } catch (err) {
-      console.error('Error loading categories:', err);
-      setError(t('error.loadCategories'));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const loadCategoryItems = async (categoryName: string) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const response = await ApiService.getCategoryItems(categoryName);
-      setCategoryItems(response.items);
-    } catch (err) {
-      console.error('Error loading category items:', err);
-      setError(t('error.loadItems'));
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleCategorySelect = (categoryName: string) => {
     setSelectedCategory(categoryName);
@@ -176,7 +199,20 @@ const CategoryView: React.FC = () => {
             items={categoryItems}
             selectedFolderName={selectedFolder?.name || null}
             onItemSelect={handleItemSelect}
+            hasMore={hasMore}
+            isLoadingMore={isLoadingMore}
+            onLoadMore={loadMore}
           />
+        )}
+        {hasMore && (
+          <Button
+            onClick={loadMore}
+            disabled={isLoadingMore}
+            variant="outlined"
+            sx={{ mt: 2 }}
+          >
+            {isLoadingMore ? <CircularProgress size={24} /> : t('button.loadMore')}
+          </Button>
         )}
       </Grid>
       {isLoading && (
