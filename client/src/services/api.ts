@@ -31,15 +31,16 @@ const api = axios.create({
 export class ApiService {
   // Image-related APIs
   static async getImages(params: SearchQuery): Promise<ImagesResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params.search) searchParams.append('search', params.search);
+    if (params.page) searchParams.append('page', params.page);
+    if (params.limit) searchParams.append('limit', params.limit);
+    if (params.sortBy) searchParams.append('sortBy', params.sortBy);
+    if (params.sortOrder) searchParams.append('sortOrder', params.sortOrder);
+
     const response: AxiosResponse<ImagesResponse> = await api.get(
-      '/api/images',
-      {
-        params: {
-          page: params.page,
-          limit: params.limit,
-          search: params.search,
-        },
-      }
+      `/api/images?${searchParams.toString()}`
     );
     return response.data;
   }

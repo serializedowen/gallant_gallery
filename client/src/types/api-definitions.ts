@@ -105,6 +105,8 @@ export interface IndexStats {
 export interface PaginationQuery {
   page?: string;
   limit?: string;
+  sortBy?: 'name' | 'date' | 'size' | 'name_number';
+  sortOrder?: 'asc' | 'desc';
 }
 
 export interface SearchQuery extends PaginationQuery {

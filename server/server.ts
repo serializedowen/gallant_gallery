@@ -236,7 +236,6 @@ async function removeFromThumbnailIndex(imagePath: string): Promise<void> {
 // ============================================
 
 app.use(cors());
-app.use(express.static(path.join(__dirname, '../public')));
 
 // Thumbnail serving middleware
 app.use(
@@ -1029,6 +1028,11 @@ app.get(
       const page = parseInt(req.query.page || '1', 10);
       const limit = parseInt(req.query.limit || '20', 10);
       const search = req.query.search || '';
+      const sortBy = req.query.sortBy || 'path';
+      const order = req.query.sortOrder || 'asc';
+
+
+
 
       let searchObj: Record<string, string> = {};
       if (search) {
@@ -1066,8 +1070,60 @@ app.get(
           });
       }
 
-      // Sort by path
-      images.sort((a, b) => a.path.localeCompare(b.path));
+      // Sort images based on sortBy parameter
+      const sortMultiplier = order === 'desc' ? -1 : 1;
+      
+      images.sort((a, b) => {
+        let result = 0;
+        
+        switch (sortBy) {
+          case 'path':
+            result = a.path.localeCompare(b.path);
+            break;
+          case 'name':
+            const nameA = path.basename(a.path);
+            const nameB = path.basename(b.path);
+            result = nameA.localeCompare(nameB);
+            break;
+          case 'name_number':
+            const nameWithNumA = path.basename(a.path);
+            const nameWithNumB = path.basename(b.path);
+            
+            // Extract numeric prefix if exists
+            const extractNumber = (name: string) => {
+              const match = name.match(/^(\d+)/);
+              return match ? parseInt(match[1], 10) : null;
+            };
+            
+            const numA = extractNumber(nameWithNumA);
+            const numB = extractNumber(nameWithNumB);
+            
+            // If both have numeric prefixes, sort by number first
+            if (numA !== null && numB !== null) {
+              if (numA !== numB) {
+                result = numA - numB;
+              } else {
+                // If numbers are equal, sort by full filename
+                result = nameWithNumA.localeCompare(nameWithNumB);
+              }
+            } else if (numA !== null && numB === null) {
+              // Files with numbers come first
+              result = -1;
+            } else if (numA === null && numB !== null) {
+              // Files with numbers come first
+              result = 1;
+            } else {
+              // Neither has numeric prefix, sort alphabetically
+              result = nameWithNumA.localeCompare(nameWithNumB);
+            }
+            break;
+
+          default:
+            result = a.path.localeCompare(b.path);
+        }
+        
+        return result * sortMultiplier;
+      });
 
       // Pagination
       const startIndex = (page - 1) * limit;
@@ -1457,11 +1513,6 @@ app.get(
   }
 );
 
-// Serve main page
-app.get('/', (req: Request, res: Response) => {
-  res.sendFile(path.join(__dirname, '../public', 'index.html'));
-});
-
 // Health check endpoint for Docker
 app.get(
   '/health',
@@ -1485,11 +1536,15 @@ app.get(
   }
 );
 
+// // Serve main page
+// app.get('/', (req: Request, res: Response) => {
+//   res.sendFile(path.join(__dirname, '../public', 'index.html'));
+// });
+
 // Serve React app in production
 if (process.env.NODE_ENV === 'production') {
   // Serve static files from the React app build directory
   app.use(express.static(path.join(__dirname, '../client/build')));
-
   // Catch all handler: send back React's index.html file for any non-API routes
   app.get('*', (req: Request, res: Response) => {
     // Skip API routes

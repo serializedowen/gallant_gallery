@@ -132,7 +132,7 @@ const Header: React.FC = () => {
   return (
     <AppBar position="sticky">
       <Toolbar>
-        <AdbIcon sx={{ display: { xs: 'none', md: 'flex' }, mr: 1 }} />
+        {/* <AdbIcon sx={{ display: { xs: 'none', md: 'flex' }, mr: 1 }} /> */}
         <Typography
           variant="h6"
           noWrap
@@ -148,7 +148,7 @@ const Header: React.FC = () => {
             textDecoration: 'none',
           }}
         >
-          GALLERY
+          <img src="/banner.svg" alt="Logo" style={{ height: 32, verticalAlign: 'middle', marginRight: 8 }} />
         </Typography>
         <Box sx={{ flexGrow: 1 }} />
         <Search>
