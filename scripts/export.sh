@@ -1,0 +1,1 @@
+docker save -o built.tar gallant_gallery-gallant-gallery:latest
